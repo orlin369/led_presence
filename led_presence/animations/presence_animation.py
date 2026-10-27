@@ -9,7 +9,8 @@ and restoring the previous light effect are handled by the app.
 context contains:
   time_s: elapsed seconds since Start
   pixel_count: actual configured LED count reported by this controller
-  tracks: fresh room-coordinate tracks from the selected sensor only (mm)
+  tracks: fresh room-coordinate tracks from the selected sensor only (mm);
+          each has the person's dashboard `color` as [r, g, b] (0-255)
   sensor: selected sensor definition, including mounting (mm / degrees)
   room: room dimensions (mm)
   controller: this light controller's settings and mounting
@@ -17,8 +18,9 @@ context contains:
   state: persistent dictionary for this controller, cleared on each Start
 
 Return exactly pixel_count RGB triples, with integer channels from 0 to 255.
-Each person projects a bright core and coloured halo onto the nearest lights.
-Movement leaves a fading wake; distance changes colour and halo width.
+Each person projects a bright core and halo onto the nearest lights in the
+same colour the dashboard shows for them. Movement leaves a fading wake;
+distance changes halo width.
 """
 
 import colorsys
@@ -63,6 +65,13 @@ def nearest_position(positions, x, y):
     return closest
 
 
+def track_colour(track, proximity):
+    """Use the person's dashboard colour, or a proximity hue without one."""
+    if track.get("color"):
+        return [channel / 255 for channel in track["color"]]
+    return colorsys.hsv_to_rgb(0.62 - 0.52 * proximity, 0.9, 1)
+
+
 def render(context):
     """Render the selected effect using fresh tracks and controller state."""
     count = context["pixel_count"]
@@ -90,8 +99,7 @@ def render(context):
             x - mounting["left_wall"], y - mounting["front_wall"]
         )
         proximity = math.exp(-depth / 4000)
-        hue = 0.62 - 0.52 * proximity
-        colour = colorsys.hsv_to_rgb(hue, 0.9, 1)
+        colour = track_colour(track, proximity)
         width = HALO_WIDTH_MM * (0.65 + 0.7 * proximity)
         for i, position in enumerate(positions):
             distance = math.hypot(
@@ -117,7 +125,12 @@ def render(context):
                 halo = math.exp(-0.5 * (distance / 300) ** 2) * spark
                 wave = 1.5
             for c in range(3):
-                emission = min(1, core * 0.8 + colour[c] * halo * wave * 0.65)
+                # Tint the core with the person's colour so it stays
+                # recognisable; a little white keeps the centre brightest.
+                emission = min(
+                    1,
+                    colour[c] * (core * 0.8 + halo * wave * 0.65) + core * 0.2,
+                )
                 pixels[i][c] = max(pixels[i][c], emission)
     state.update(time=now, trail=pixels)
     # Return full-range RGB; transport applies the dashboard brightness.

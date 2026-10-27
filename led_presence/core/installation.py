@@ -8,6 +8,7 @@ import threading
 
 from led_presence.config.configuration import migrate_config, validate_config
 from led_presence.core.paths import ROOT
+from led_presence.core.track_colours import TrackColours
 from led_presence.lights.light_controllers import LightControllers
 from led_presence.sensors.sensor_reader import SensorReader
 
@@ -20,6 +21,7 @@ class Installation:
         self.lock = threading.RLock()
         self.start_workers = start_workers
         self.readers = {}
+        self.track_colours = TrackColours()
         path.parent.mkdir(parents=True, exist_ok=True)
         if not path.exists():
             path.write_text(
@@ -116,6 +118,9 @@ class Installation:
             if sensor["connected"] and not sensor["stale"]
             for track in sensor["tracks"]
         ]
+        # Colours are assigned once here so the dashboard and every light
+        # worker see the same colour for the same person.
+        self.track_colours.assign(live_tracks)
         result = {
             "config": config,
             "units": "mm",

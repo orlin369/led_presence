@@ -120,7 +120,7 @@ The first sensor in the Devices list is always the reference for the sensor-faci
 
 Available effects:
 
-- **Spotlight:** a small, fixed-width light spot follows each person; proximity changes colour without extending the illuminated section.
+- **Spotlight:** a small, fixed-width light spot follows each person in their colour; its width does not change with proximity.
 - **Presence ribbons:** coloured halos follow people and leave a fading wake.
 - **Ripples:** waves spread out from each person's projected position along the lights.
 - **Fireflies:** clusters of twinkling sparks follow people.
@@ -137,7 +137,7 @@ python main.py
 
 The file is imported once at startup. There is no hot reload or browser code editor. Its `render(context)` function receives elapsed time, the configured LED count, the selected sensor, fresh room-coordinate tracks, room dimensions and controller settings. Return exactly `pixel_count` RGB triples, with integer channels from 0 to 255. Keep the function fast and non-blocking; the app handles transport, smoothing and restoration.
 
-The initial program, **Presence ribbons**, projects each person onto the nearest section of the lights using room coordinates and the saved bar geometry. A bright core follows movement, surrounded by a coloured halo and fading trail. Distance from the sensor changes the colour and halo width. Multiple people create separate pools of light, and an empty/offline source fades to black. Defaults cap brightness at 25%. Constants near the top of the file control brightness, halo width and trail duration.
+The initial program, **Presence ribbons**, projects each person onto the nearest section of the lights using room coordinates and the saved bar geometry. A bright core follows movement, surrounded by a halo and fading trail in the person's colour. Distance from the sensor changes the halo width. Multiple people create separate pools of light, and an empty/offline source fades to black. Effects return full-range colour; brightness (default 25%) is applied when frames are sent. Constants near the top of the file control halo width and trail duration.
 
 The program reads the actual configured LED count (currently 100 on the original controller). Until pixels per bar are verified, it estimates LED positions at equal density along the bars in electrical order; the preview labels this approximation. It honours each bar's reversed wiring and the controller's saved location and orientation. Accurate positioning requires verified bar dimensions and pixel counts matching the controller. `render(context)` also receives `pixel_positions` in mm and a persistent per-controller `state` dictionary, reset on Start. Spatial effects below retain their stricter pixel-mapping checks.
 
@@ -146,6 +146,8 @@ Start checks every enabled destination before changing lights. If startup fails,
 **Presence aura** blends soft glows around detected people; **Presence ripples** produces moving waves. Each controller has independent brightness, reach, speed, fade and idle glow. Influence uses horizontal room distance because radar Z is not calibrated floor height. The animation smooths between one-second sensor updates. Without fresh tracks and with zero idle glow, it fades to black.
 
 The backend renews `Presence.LiveTrack` every 25 seconds and receives real object events over WebSocket. Offline/stale tracks are excluded. Track IDs include the sensor ID. Tracks are not fused across sensors, so detection totals are not unique-person counts. A no-track event stays valid while connected until another track event.
+
+Each live track gets a unique colour from a fixed LED-friendly palette (`led_presence/core/track_colours.py`). The dashboard draws the person in that colour and every animation lights them in it. A person keeps their colour while tracked and for 3 seconds after a dropout. Beyond eight simultaneous people, colours repeat. Sensor markers keep their own per-sensor colours.
 
 Controllers start in preview-only mode. For **spatial per-bar effects**, select one on **Devices → light controls**, verify product measurements, then use **Start presence lighting**. Bar count multiplied by pixels per bar must match that controller's `num_leds`, and the DDP port must match. The original controller reports **100 pixels**, which does not divide evenly into nine identical bars; confirm the actual count and correct the device configuration before using those effects. The dashboard program uses the reported count directly with estimated positions until mapping is verified. Neither path changes `num_leds`.
 

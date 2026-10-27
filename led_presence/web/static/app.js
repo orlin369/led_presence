@@ -13,6 +13,8 @@ function writePath(object, path, value) {
 }
 const num = value => Number.isFinite(value) ? Math.round(value).toLocaleString() : '—';
 const color = (id, c) => palette[Math.max(0, c.sensors.findIndex(s => s.id === id)) % palette.length];
+// The server assigns each person a colour that the LED animations also use.
+const trackColor = (t, c) => t.color ? '#'+t.color.map(v => v.toString(16).padStart(2,'0')).join('') : color(t.sensor_id, c);
 
 const viewpoint = document.createElement('select');
 viewpoint.id = 'viewpoint';
@@ -250,7 +252,7 @@ function draw(state) {
     add('text',{x:p.x+16,y:p.y-20,fill,'font-size':11},s.name);
   }
   for (const t of tracks) {
-    const fill = color(t.sensor_id,c);
+    const fill = trackColor(t,c);
     const p=point(t.room_x_mm,t.room_y_mm);
     const outside=t.room_x_mm<0||t.room_y_mm<0||t.room_x_mm>room.width_mm||t.room_y_mm>room.depth_mm;
     add('circle',{cx:p.x,cy:p.y,r:16,fill:fill+'22',stroke:fill,'stroke-dasharray':outside?'4 3':'none'});
@@ -260,9 +262,9 @@ function draw(state) {
   $('legend').replaceChildren();
   for (const sensor of c.sensors) {
     const el=document.createElement('span');el.style.color=color(sensor.id,c);
-    el.textContent=`▲ / ● ${sensor.name}${sensor.enabled?'':' (disabled)'}`;$('legend').append(el);
+    el.textContent=`▲ ${sensor.name}${sensor.enabled?'':' (disabled)'}`;$('legend').append(el);
   }
-  $('map-note').textContent=dirty?'Unsaved geometry preview. Save to apply changes to the installation.':'Each colour identifies one sensor and its tracks. Dashed tracks are outside the room. Stale positions are hidden.';
+  $('map-note').textContent=dirty?'Unsaved geometry preview. Save to apply changes to the installation.':'Triangles show sensor colours. Each person has a unique colour, also used by the LED animation. Dashed tracks are outside the room. Stale positions are hidden.';
 }
 
 function render(state) {
@@ -290,6 +292,8 @@ function render(state) {
     for(const text of [`${t.sensor_name} / #${t.id}`,`${num(t.room_x_mm)} / ${num(t.room_y_mm)}`,`${num(p.x_mm)} / ${num(p.y_mm)} / ${num(p.z_mm)}`,`${num(p.minz_mm)} / ${num(p.maxz_mm)}`]) {
       const cell=document.createElement('td');cell.textContent=text;row.append(cell);
     }
+    const swatch=document.createElement('span');swatch.textContent='● ';swatch.style.color=trackColor(t,state.config);
+    row.firstChild.prepend(swatch);
     $('tracks').append(row);
   }
   if(!state.tracks.length){

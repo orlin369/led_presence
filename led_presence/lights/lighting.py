@@ -217,6 +217,19 @@ def program_pixel_positions(config, layout, count):
     return positions, not exact
 
 
+def track_color(track):
+    """Use the person's dashboard colour, or a stable hue from its key."""
+    if track.get("color"):
+        return [channel / 255 for channel in track["color"]]
+    hue = (
+        int.from_bytes(
+            hashlib.sha256(track["track_key"].encode()).digest()[:2], "big"
+        )
+        / 65535
+    )
+    return colorsys.hsv_to_rgb((0.42 + hue * 0.22) % 1, 0.75, 1)
+
+
 def render_frame(config, tracks, timestamp):
     """
     Horizontal proximity avoids assuming uncalibrated radar Z is floor height.
@@ -253,16 +266,7 @@ def render_frame(config, tracks, timestamp):
                 wave = 0.78 + 0.22 * math.sin(phase - distance / 550)
                 if animation["mode"] == "ripple":
                     wave = (0.5 + 0.5 * math.cos(phase - distance / 280)) ** 3
-                hue = (
-                    int.from_bytes(
-                        hashlib.sha256(track["track_key"].encode()).digest()[
-                            :2
-                        ],
-                        "big",
-                    )
-                    / 65535
-                )
-                color = colorsys.hsv_to_rgb((0.42 + hue * 0.22) % 1, 0.75, 1)
+                color = track_color(track)
                 for channel in range(3):
                     rgb[channel] += color[channel] * envelope * wave
             brightness = animation["brightness_pct"] / 100
