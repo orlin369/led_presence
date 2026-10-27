@@ -3,6 +3,7 @@
 """Independent light workers and shared animation controls."""
 
 import copy
+import math
 import threading
 import time
 
@@ -23,6 +24,7 @@ class LightControllers:
         self.services = {}
         self.program_sensor_id = None
         self.program_animation_id = presence_animation.DEFAULT_ANIMATION
+        self.program_brightness_pct = presence_animation.DEFAULT_BRIGHTNESS_PCT
         self.program_ids = []
         self.program_started_at = None
         self.program_error = None
@@ -127,6 +129,7 @@ class LightControllers:
                 "running": bool(active),
                 "sensor_id": self.program_sensor_id,
                 "animation_id": self.program_animation_id,
+                "brightness_pct": self.program_brightness_pct,
                 "animations": [
                     {"id": key, **value}
                     for key, value in presence_animation.ANIMATIONS.items()
@@ -136,6 +139,25 @@ class LightControllers:
                 "error": self.program_error
                 or ("; ".join(errors) if errors else None),
             }
+
+    def set_program_brightness(self, brightness_pct):
+        """Set program brightness without starting or resetting effects."""
+        if (
+            isinstance(brightness_pct, bool)
+            or not isinstance(brightness_pct, (int, float))
+            or not math.isfinite(brightness_pct)
+            or not 0 <= brightness_pct <= 100
+        ):
+            raise ValueError("Brightness must be a number from 0 to 100")
+        with self.lock:
+            self.program_brightness_pct = brightness_pct
+            for key in self.program_ids:
+                service = self.services.get(key)
+                if service:
+                    with service.lock:
+                        if service.program is not None:
+                            service.program["brightness_pct"] = brightness_pct
+                            service.generation += 1
 
     def start_program(self, config, animation_id=None):
         animation_id = (
@@ -204,6 +226,7 @@ class LightControllers:
                 "room": copy.deepcopy(config["room"]),
                 "started_at": self.program_started_at,
                 "animation_id": animation_id,
+                "brightness_pct": self.program_brightness_pct,
             }
             try:
                 for group in groups:

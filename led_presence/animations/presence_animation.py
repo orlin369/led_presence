@@ -46,7 +46,7 @@ ANIMATIONS = {
         "description": "A cluster of twinkling sparks follows each person.",
     },
 }
-MAX_BRIGHTNESS_PCT = 25
+DEFAULT_BRIGHTNESS_PCT = 25
 TRAIL_SECONDS = 0.7
 HALO_WIDTH_MM = 250
 
@@ -120,5 +120,6 @@ def render(context):
                 emission = min(1, core * 0.8 + colour[c] * halo * wave * 0.65)
                 pixels[i][c] = max(pixels[i][c], emission)
     state.update(time=now, trail=pixels)
-    scale = 255 * MAX_BRIGHTNESS_PCT / 100
+    # Return full-range RGB; transport applies the dashboard brightness.
+    scale = 255
     return [tuple(round(min(1, c) * scale) for c in pixel) for pixel in pixels]

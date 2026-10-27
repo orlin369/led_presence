@@ -104,6 +104,27 @@ def animation_program():
     return jsonify(installation.lighting.program_state())
 
 
+def animation_brightness():
+    """Change program brightness independently of its running state."""
+    if request.headers.get("Origin") and request.headers[
+        "Origin"
+    ] != request.host_url.rstrip("/"):
+        return jsonify(error="Cross-origin writes are not allowed"), 403
+    if not request.is_json:
+        return jsonify(error="Send application/json"), 415
+    data = request.get_json()
+    if not isinstance(data, dict):
+        return jsonify(error="Provide brightness_pct from 0 to 100"), 400
+    installation = current_app.extensions["installation"]
+    try:
+        installation.lighting.set_program_brightness(
+            data.get("brightness_pct")
+        )
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+    return jsonify(installation.lighting.program_state())
+
+
 def config():
     installation = current_app.extensions["installation"]
     if request.method == "GET":
@@ -150,4 +171,9 @@ def create_app(instance_path=None, start_worker=True):
         "/api/animation", view_func=animation_program, methods=["POST"]
     )
     app.add_url_rule("/api/config", view_func=config, methods=["GET", "PUT"])
+    app.add_url_rule(
+        "/api/animation/brightness",
+        view_func=animation_brightness,
+        methods=["POST"],
+    )
     return app

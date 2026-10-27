@@ -292,6 +292,11 @@ class LightingService:
                             "presence_animation.render returned an invalid "
                             "RGB pixel"
                         )
+                brightness = self.program["brightness_pct"] / 100
+                target = [
+                    [round(channel * brightness) for channel in pixel]
+                    for pixel in target
+                ]
                 for bar in layout["bars"]:
                     bar["pixels"] = [None] * (
                         config["product"]["pixels_per_bar"] or 12

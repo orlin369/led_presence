@@ -244,7 +244,7 @@ class ProgramTests(unittest.TestCase):
             self.assertEqual(len(frame), 100)
             self.assertTrue(
                 all(
-                    isinstance(c, int) and 0 <= c <= 64
+                    isinstance(c, int) and 0 <= c <= 255
                     for p in frame
                     for c in p
                 )
