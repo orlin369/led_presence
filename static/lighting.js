@@ -124,6 +124,7 @@
     if(frame.controller_pixels!==null)notes.push(`Controller configured for ${frame.controller_pixels} pixels.`);
     if(!frame.product_verified)notes.push('Example geometry: verify length and pixels per bar before output.');
     if(frame.controller_pixels!==null && frame.controller_pixels!==frame.mapped_pixels)notes.push('Pixel mapping does not match the controller.');
+    if(frame.mapping_mode==='position-program')notes.splice(0,notes.length,`Position-following animation · ${frame.controller_pixels} configured LEDs · ${frame.program_mapping_estimated?'estimated LED positions along the bar geometry; verify pixels per bar for precise mapping':'verified LED positions'}.`);
     el('lighting-preview-note').textContent=notes.join(' ');
     if(el('lighting-start'))el('lighting-start').disabled=busy||!frame.enabled||frame.output_enabled||!frame.product_verified||!frame.mapped_pixels||!frame.controller_connected||frame.mapped_pixels!==frame.controller_pixels;
     if(el('lighting-stop'))el('lighting-stop').disabled=busy;

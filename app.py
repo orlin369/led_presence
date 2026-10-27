@@ -232,6 +232,12 @@ class Installation:
     def save(self, config):
         validate_config(config)
         with self.lock:
+            source_id = self.lighting.program_sensor_id
+            if source_id is not None:
+                old_source = next((s for s in self.config["sensors"] if s["id"] == source_id), None)
+                new_source = next((s for s in config["sensors"] if s["id"] == source_id), None)
+                if self.config["room"] != config["room"] or old_source != new_source:
+                    self.lighting.stop_program()
             self.lighting.stop_changed(self.config["lighting"], config["lighting"])
             self.write_config(config)
             self.config = copy.deepcopy(config)
@@ -310,6 +316,25 @@ def create_app(instance_path=None, start_worker=True):
         except (ValueError, requests.RequestException) as exc:
             return jsonify(error=str(exc)), 400
         return jsonify(installation.snapshot()["lighting"])
+
+    @app.post("/api/animation")
+    def animation_program():
+        if request.headers.get("Origin") and request.headers["Origin"] != request.host_url.rstrip("/"):
+            return jsonify(error="Cross-origin writes are not allowed"), 403
+        if not request.is_json:
+            return jsonify(error="Send application/json"), 415
+        data = request.get_json()
+        if not isinstance(data, dict) or not isinstance(data.get("enabled"), bool):
+            return jsonify(error="enabled must be true or false"), 400
+        try:
+            with installation.lock:
+                if data["enabled"]:
+                    installation.lighting.start_program(data.get("sensor_id"), installation.config, data.get("animation_id"))
+                else:
+                    installation.lighting.stop_program()
+        except (ValueError, requests.RequestException) as exc:
+            return jsonify(error=str(exc)), 400
+        return jsonify(installation.lighting.program_state())
 
     @app.route("/api/config", methods=["GET", "PUT"])
     def config():

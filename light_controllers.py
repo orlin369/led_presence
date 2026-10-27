@@ -3,6 +3,7 @@ import copy
 import re
 import threading
 import time
+import presence_animation
 
 from lighting import LightingService, render_frame, validate_lighting
 
@@ -74,6 +75,11 @@ class LightControllers:
         self.start_workers = start_workers
         self.lock = threading.RLock()
         self.services = {}
+        self.program_sensor_id = None
+        self.program_animation_id = presence_animation.DEFAULT_ANIMATION
+        self.program_ids = []
+        self.program_started_at = None
+        self.program_error = None
         self.reconcile(installation.config["lighting"])
 
     def stop_changed(self, before, after):
@@ -115,7 +121,99 @@ class LightControllers:
                 for bar in frame["bars"]:
                     bars.append({**bar, "controller_id": group["id"], "controller_name": group["name"],
                                  "key": f'{group["id"]}:{bar["id"]}'})
-            return {"controllers": groups, "bars": bars, "output_enabled": any(g["output_enabled"] for g in groups)}
+            return {"controllers": groups, "bars": bars, "output_enabled": any(g["output_enabled"] for g in groups),
+                    "program": self.program_state()}
+
+    def program_state(self):
+        with self.lock:
+            active, errors, pending = [], [], []
+            for key in self.program_ids:
+                service = self.services.get(key)
+                if not service:
+                    continue
+                with service.lock:
+                    if service.state["program_running"]:
+                        active.append(key)
+                    message = service.state.get("program_error") or service.state["error"]
+                    if message:
+                        errors.append(f'{key}: {message}')
+                    if not service.state["program_running"] and service.previous is not None:
+                        pending.append(key)
+            return {"running": bool(active), "sensor_id": self.program_sensor_id,
+                    "animation_id": self.program_animation_id,
+                    "animations": [{"id": key, **value} for key, value in presence_animation.ANIMATIONS.items()],
+                    "controller_ids": active, "restoration_pending": pending,
+                    "error": self.program_error or ("; ".join(errors) if errors else None)}
+
+    def start_program(self, sensor_id, config, animation_id=None):
+        animation_id = presence_animation.DEFAULT_ANIMATION if animation_id is None else animation_id
+        if not isinstance(animation_id, str) or animation_id not in presence_animation.ANIMATIONS:
+            raise ValueError("Select a supported animation")
+        sensor = next((s for s in config["sensors"] if s["id"] == sensor_id and s["enabled"]), None)
+        if sensor is None:
+            raise ValueError("Select an enabled presence sensor")
+        source = next(s for s in self.installation.snapshot(include_lighting=False)["sensors"] if s["id"] == sensor_id)
+        if not source["connected"]:
+            raise ValueError("Selected presence sensor is offline")
+        groups = [g for g in config["lighting"]["controllers"] if g["enabled"]]
+        if not groups:
+            raise ValueError("Enable at least one light controller on Devices")
+        with self.lock:
+            if self.program_state()["running"] and self.program_sensor_id == sensor_id:
+                if animation_id != self.program_animation_id:
+                    switched_at = time.monotonic()
+                    for key in self.program_ids:
+                        service = self.services.get(key)
+                        if service:
+                            with service.lock:
+                                if service.program is not None:
+                                    service.program.update(animation_id=animation_id, state={}, started_at=switched_at)
+                                    service.generation += 1
+                    self.program_animation_id = animation_id
+                return
+            # Preflight every destination before changing any physical light.
+            for group in groups:
+                try:
+                    self.services[group["id"]].prepare_program(controller_config(config["lighting"], group))
+                except Exception as exc:
+                    raise ValueError(f'{group["name"]}: {exc}') from exc
+            self.stop_program()
+            self.program_sensor_id = sensor_id
+            self.program_animation_id = animation_id
+            self.program_started_at = time.monotonic()
+            self.program_error = None
+            context = {"sensor": copy.deepcopy(sensor), "room": copy.deepcopy(config["room"]),
+                       "started_at": self.program_started_at, "animation_id": animation_id}
+            try:
+                for group in groups:
+                    self.program_ids.append(group["id"])
+                    self.services[group["id"]].set_output(True, controller_config(config["lighting"], group),
+                                                          program=context)
+            except Exception as exc:
+                message = str(exc)
+                try:
+                    self.stop_program()
+                except ValueError as restoration:
+                    message += f"; {restoration}"
+                self.program_error = message
+                raise ValueError(message) from exc
+
+    def stop_program(self):
+        with self.lock:
+            failed = []
+            for key in self.program_ids:
+                service = self.services.get(key)
+                if service:
+                    try:
+                        service.stop_output()
+                    except ValueError as exc:
+                        failed.append((key, str(exc)))
+            self.program_ids = [key for key, _ in failed]
+            self.program_error = "; ".join(error for _, error in failed) or None
+            if failed:
+                raise ValueError(self.program_error)
+            self.program_sensor_id = None
+            self.program_started_at = None
 
     def set_output(self, enabled, config, controller_id=None):
         groups = config["controllers"]

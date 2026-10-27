@@ -114,11 +114,40 @@ A controller-rooted tree can represent branches geometrically; match supported p
 
 ## Presence animation and physical output
 
+### Editable dashboard animation program
+
+The dashboard **Start animation** button sits directly after the reference-sensor dropdown. Choose a sensor and an effect in the **Animation** dropdown, then start the program. You can change effects while running; each controller clears its previous trail and blends into the new effect. The button becomes **Stop animation** and the sensor selection stays locked until stopped. Fresh tracks from that sensor drive every enabled light controller. The program runs on the server, so changing pages or closing the browser does not stop it; reloading the dashboard shows its current effect and state. App startup leaves it stopped.
+
+Available effects:
+
+- **Spotlight:** a small, fixed-width light spot follows each person; proximity changes colour without extending the illuminated section.
+- **Presence ribbons:** coloured halos follow people and leave a fading wake.
+- **Ripples:** waves spread out from each person's projected position along the lights.
+- **Fireflies:** clusters of twinkling sparks follow people.
+
+All effects fade to black without fresh tracks. The browser remembers the last dropdown choice; a new browser defaults to Spotlight. Effects and their labels are defined in `presence_animation.py` (`ANIMATIONS`); `context.animation_id` selects the renderer. Restart the app after editing this file.
+
+Edit **[presence_animation.py](presence_animation.py)** while the application is stopped:
+
+```powershell
+# Stop the app with Ctrl+C first, then edit presence_animation.py.
+python -m py_compile presence_animation.py
+python app.py
+```
+
+The file is imported once at startup. There is no hot reload or browser code editor. Its `render(context)` function receives elapsed time, the configured LED count, the selected sensor, fresh room-coordinate tracks, room dimensions and controller settings. Return exactly `pixel_count` RGB triples, with integer channels from 0 to 255. Keep the function fast and non-blocking; the app handles transport, smoothing and restoration.
+
+The initial program, **Presence ribbons**, projects each person onto the nearest section of the lights using room coordinates and the saved bar geometry. A bright core follows movement, surrounded by a coloured halo and fading trail. Distance from the sensor changes the colour and halo width. Multiple people create separate pools of light, and an empty/offline source fades to black. Defaults cap brightness at 25%. Constants near the top of the file control brightness, halo width and trail duration.
+
+The program reads the actual configured LED count (currently 100 on the original controller). Until pixels per bar are verified, it estimates LED positions at equal density along the bars in electrical order; the preview labels this approximation. It honours each bar's reversed wiring and the controller's saved location and orientation. Accurate positioning requires verified bar dimensions and pixel counts matching the controller. `render(context)` also receives `pixel_positions` in mm and a persistent per-controller `state` dictionary, reset on Start. Spatial effects below retain their stricter pixel-mapping checks.
+
+Start checks every enabled destination before changing lights. If startup fails, already-started controllers are restored. Stop restores previous effects and supported settings. Invalid RGB output stops that controller, restores its effect and reports an error. Editing the room or selected sensor stops the program to avoid stale coordinates. Stop and restart after enabling additional controllers to include them.
+
 **Presence aura** blends soft glows around detected people; **Presence ripples** produces moving waves. Each controller has independent brightness, reach, speed, fade and idle glow. Influence uses horizontal room distance because radar Z is not calibrated floor height. The animation smooths between one-second sensor updates. Without fresh tracks and with zero idle glow, it fades to black.
 
 The backend renews `Presence.LiveTrack` every 25 seconds and receives real object events over WebSocket. Offline/stale tracks are excluded. Track IDs include the sensor ID. Tracks are not fused across sensors, so detection totals are not unique-person counts. A no-track event stays valid while connected until another track event.
 
-Controllers start in preview-only mode. Select one on **Devices ? light controls**, verify product measurements, then use **Start presence lighting**. The app checks that bar count multiplied by pixels per bar matches that controller's configured `num_leds`, and that its DDP port matches. The original controller reports **100 pixels**, which does not divide evenly into nine identical bars; confirm the actual count and correct the device configuration first. The app does not guess counts or change `num_leds`.
+Controllers start in preview-only mode. For **spatial per-bar effects**, select one on **Devices → light controls**, verify product measurements, then use **Start presence lighting**. Bar count multiplied by pixels per bar must match that controller's `num_leds`, and the DDP port must match. The original controller reports **100 pixels**, which does not divide evenly into nine identical bars; confirm the actual count and correct the device configuration before using those effects. The dashboard program uses the reported count directly with estimated positions until mapping is verified. Neither path changes `num_leds`.
 
 Each enabled controller has an independent worker and UDP connection. Start/stop targets a controller ID; the API requires a selection when several exist. One offline controller does not stop another animation. Streaming targets 20 fps using RGB888 DDP, byte offsets and a final PUSH flag. Brightness is encoded in pixels, so controller brightness is temporarily 100. Protocol and colour order remain unchanged.
 
@@ -143,7 +172,7 @@ Do not enable the reloader, which duplicates device readers and animation worker
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-Tests cover coordinate transforms, migration, registry validation, separate locations, shared products, independent output, simultaneous loopback UDP streams, stopping one while another continues, effect restoration, bar geometry and DDP framing.
+Tests cover coordinate transforms, migration, registry validation, separate locations, shared products, independent output, simultaneous loopback UDP streams, stopping one while another continues, effect restoration, bar geometry, DDP framing, the editable animation contract, selected-sensor filtering, all-controller preflight/rollback, source changes and recovery from invalid program output.
 
 ## License
 

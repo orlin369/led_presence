@@ -39,10 +39,63 @@ const sensorControl = document.createElement('label');
 sensorControl.className = 'view-control'; sensorControl.htmlFor = 'map-sensor';
 sensorControl.append('Reference sensor', sensorSelect);
 $('map').before(sensorControl);
+let animationState={running:false},animationBusy=false,animationAction='',animationMessage='';
+let animationToggle,animationStatus,animationSelect;
+if(!form) {
+  const controls=document.createElement('div');controls.className='sensor-program-control';
+  sensorControl.replaceWith(controls);sensorControl.className='sensor-picker';
+  animationToggle=document.createElement('button');animationToggle.id='animation-toggle';animationToggle.type='button';animationToggle.textContent='Start animation';animationToggle.disabled=true;
+  animationStatus=document.createElement('p');animationStatus.className='hint';animationStatus.id='animation-status';animationStatus.setAttribute('role','status');
+  animationSelect=document.createElement('select');animationSelect.id='animation-select';animationSelect.disabled=true;
+  const animationLabel=document.createElement('label');animationLabel.className='animation-picker';animationLabel.htmlFor='animation-select';animationLabel.append('Animation',animationSelect);
+  controls.append(sensorControl,animationToggle,animationLabel,animationStatus);
+  animationToggle.addEventListener('click',()=>applyAnimation(!(animationState.running||animationState.restoration_pending?.length)));
+  animationSelect.addEventListener('change',()=>{
+    try{localStorage.setItem('led-presence-animation',animationSelect.value);}catch{}
+    if(animationState.running)applyAnimation(true);
+    else if(latest)renderAnimationProgram(latest);
+  });
+  async function applyAnimation(enabled) {
+    animationBusy=true;animationAction=enabled?(animationState.running?'Changing animation...':'Starting...'):'Stopping...';animationMessage='';
+    if(latest)renderAnimationProgram(latest);
+    try {
+      const response=await fetch('/api/animation',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled,sensor_id:selectedSensor,animation_id:animationSelect.value})});
+      const result=await response.json();if(!response.ok)throw new Error(result.error);
+      animationState=result;await poll();
+    }catch(error){animationMessage=error.message;}
+    finally{animationBusy=false;if(latest)renderAnimationProgram(latest);}
+  }
+}
+function renderAnimationProgram(state) {
+  if(!animationToggle)return;
+  animationState=state.lighting?.program||{running:false};
+  const animations=animationState.animations||[];
+  if(!animationSelect.options.length&&animations.length){
+    for(const item of animations){const option=document.createElement('option');option.value=item.id;option.textContent=item.name;animationSelect.append(option);}
+    let preferred='spotlight';try{preferred=localStorage.getItem('led-presence-animation')||preferred;}catch{}
+    animationSelect.value=animations.some(a=>a.id===preferred)?preferred:animations[0].id;
+  }
+  if(animationState.running&&!animationBusy)animationSelect.value=animationState.animation_id;
+  animationSelect.disabled=animationBusy||!!state.app_offline||!animations.length||!!animationState.restoration_pending?.length;
+  const selectedAnimation=animations.find(a=>a.id===animationSelect.value);
+  animationSelect.title=selectedAnimation?.description||'';
+  const active=animationState.running||animationState.restoration_pending?.length;
+  if(active&&animationState.sensor_id){selectedSensor=animationState.sensor_id;sensorSelect.value=selectedSensor;}
+  const sensor=state.sensors.find(s=>s.id===selectedSensor);
+  sensorSelect.disabled=!!active||animationBusy;
+  animationToggle.textContent=animationBusy?animationAction:active?'Stop animation':'Start animation';
+  animationToggle.setAttribute('aria-pressed',String(!!animationState.running));
+  const hasLights=state.config.lighting.controllers.some(c=>c.enabled);
+  animationToggle.disabled=!!state.app_offline||animationBusy||(!active&&(!sensor?.connected||!hasLights));
+  animationStatus.textContent=state.app_offline?'App connection lost; animation status unavailable.':animationMessage||animationState.error||(animationBusy?animationAction:active?
+    `Running from ${sensor?.name||'sensor'} · ${animationState.controller_ids.length} controller(s)${sensor?.connected?'':' · sensor offline, fading out'}`:
+    !hasLights?'Enable a light controller on Devices.':!sensor?.connected?'Waiting for the selected sensor.':selectedAnimation?.description||'Ready · uses this sensor and all enabled light controllers.');
+}
 sensorSelect.addEventListener('change', () => {
+  animationMessage='';
   selectedSensor = sensorSelect.value;
   if(form) for(const radio of form.querySelectorAll('input[name="selected-sensor"]')) radio.checked=radio.value===selectedSensor;
-  if(latest) draw(latest);
+  if(latest){renderAnimationProgram(latest);draw(latest);}
 });
 $('map').closest('.panel').querySelector('.hint').textContent = 'Top view · millimetres · wall names and measurements stay fixed as the view rotates';
 viewpoint.addEventListener('change', () => {
@@ -235,6 +288,7 @@ function draw(state) {
 function render(state) {
   latest = state;
   if (!config || JSON.stringify(config) !== JSON.stringify(state.config)) populate(state.config);
+  renderAnimationProgram(state);
   const active=state.sensors.filter(s=>s.enabled), online=active.filter(s=>s.connected);
   if($('connection')) {
     $('connection').textContent=`${online.length} / ${active.length} sensors connected`;
@@ -356,6 +410,6 @@ if(roomForm) {
 
 async function poll(){
   try{const response=await fetch('/api/state',{cache:'no-store',signal:AbortSignal.timeout(8000)});if(!response.ok)throw new Error('App unavailable');render(await response.json());}
-  catch(error){if(latest)render({...latest,tracks:[],sensors:latest.sensors.map(s=>({...s,connected:false,stale:true}))});if($('connection')){$('connection').textContent='App connection lost';$('connection').className='error';}}
+  catch(error){if(latest)render({...latest,app_offline:true,tracks:[],sensors:latest.sensors.map(s=>({...s,connected:false,stale:true}))});if($('connection')){$('connection').textContent='App connection lost';$('connection').className='error';}}
 }
 async function loop(){await poll();setTimeout(loop,1000);}loop();
