@@ -2,32 +2,73 @@
 
 A local Flask application that turns real Shelly Presence Gen4 readings into spatial light animations. Multiple sensors and multiple Shelly NOLU Bars controllers share one room. Each controller has its own location, connected bars, animation and output connection. Distances use **mm** and angles use **degrees**.
 
-## Run locally
+## Installation
 
-Requires Python 3.12 or newer and network access to the devices.
+All platforms need Python 3.12 or newer, Git and a computer on the same network as the Shelly devices. Each section installs the app into a local virtual environment (`.venv`) and starts it. Afterwards, open **http://127.0.0.1:5000** on the same computer and stop the app with Ctrl+C.
+
+The app uses Flask's local development server on loopback only, without debug mode or the reloader. On first start it creates `instance/config.json` from `config.example.json`; enter your own device addresses on **Devices** and your measurements on **Geometry** (see [Per-installation configuration](#per-installation-configuration)).
+
+### Windows
+
+Install Python from [python.org](https://www.python.org/downloads/) (tick **Add python.exe to PATH**) and [Git for Windows](https://git-scm.com/download/win). Then, in PowerShell:
 
 ```powershell
-Set-Location 'C:\Users\User\Documents\Git\orlin369\led_presence'
+git clone https://github.com/orlin369/led_presence.git
+Set-Location led_presence
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe main.py
+```
+
+To start it later, from the repository folder:
+
+```powershell
 .\.venv\Scripts\Activate.ps1
 python main.py
 ```
 
-If PowerShell blocks activation, allow local scripts for this window only:
+If PowerShell blocks activation, allow local scripts for this window only, then activate again:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
 .\.venv\Scripts\Activate.ps1
 ```
 
-First-time setup:
+Use `deactivate` to leave the environment.
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe main.py
+### Linux
+
+Install Python and Git with your package manager. On Debian or Ubuntu, `venv` is a separate package:
+
+```bash
+sudo apt install python3 python3-venv git
 ```
 
-Open **http://127.0.0.1:5000**. Stop with Ctrl+C; use `deactivate` to leave the environment. The app uses Flask's local development server on loopback without debug mode or the reloader. On macOS/Linux, use `.venv/bin/python`.
+Check that `python3 --version` reports 3.12 or newer. Then:
+
+```bash
+git clone https://github.com/orlin369/led_presence.git
+cd led_presence
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python main.py
+```
+
+To start it later, run `.venv/bin/python main.py` from the repository folder, or `source .venv/bin/activate` followed by `python main.py`.
+
+### macOS
+
+The system `python3` may be older than 3.12. Install a current version from [python.org](https://www.python.org/downloads/macos/) or with [Homebrew](https://brew.sh/) (`brew install python@3.12 git`). Then, in Terminal:
+
+```bash
+git clone https://github.com/orlin369/led_presence.git
+cd led_presence
+python3.12 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python main.py
+```
+
+To start it later, run `.venv/bin/python main.py` from the repository folder, or `source .venv/bin/activate` followed by `python main.py`. macOS may ask whether Python can find devices on the local network; allow it, or the sensors and controllers cannot be reached.
 
 ## Pages and setup flow
 
