@@ -240,7 +240,9 @@ function draw(state) {
     }
     for(const controller of lighting.controllers){
     const root=point(controller.controller[0],controller.controller[1]);
-    add('rect',{x:root.x-6,y:root.y-6,width:12,height:12,rx:2,fill:'#8eb4c6'});
+    // Green/red follow the lamp's own on/off state; grey means unknown/offline.
+    const power=controller.controller_on===true?'#4cd964':controller.controller_on===false?'#ff4d4d':'#8eb4c6';
+    add('rect',{x:root.x-6,y:root.y-6,width:12,height:12,rx:2,fill:power});
     add('text',{x:root.x+10,y:root.y-10,fill:'#8eb4c6','font-size':10},controller.name);
     }
   }

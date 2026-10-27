@@ -74,6 +74,7 @@ class LightControllers:
                         **layout,
                         "output_enabled": False,
                         "controller_connected": False,
+                        "controller_on": None,
                         "controller_pixels": None,
                         "error": None,
                         "frames_sent": 0,

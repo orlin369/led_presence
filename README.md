@@ -74,7 +74,7 @@ To start it later, run `.venv/bin/python main.py` from the repository folder, or
 
 1. **Devices** (`/devices`): add, name, enable, disable or remove sensors and light controllers. Set IP addresses, controller component IDs, DDP ports and product types here. Below the registry, select a controller for its live preview, animation settings and independent start/stop controls (`/devices#lights`). Device IDs stay stable when names or locations change.
 2. **Geometry** (`/geometry`): separate **Room**, **Sensors** and **Lights** tabs. Room sets dimensions and calibration notes. Sensors sets mounting for registered sensors and shows live readings. Lights selects a controller and sets its location, shared product measurements and bar connections. Direct links: `/geometry#room`, `/geometry#sensors`, `/geometry#lights`.
-3. **Dashboard** (`/`): the shared room plan, presence summary and object coordinates. All sensor and controller locations are shown; bar labels include the controller name. Viewpoint controls change only the drawing.
+3. **Dashboard** (`/`): the shared room plan, presence summary and object coordinates. All sensor and controller locations are shown; bar labels include the controller name. Each controller box is green when the lamp is switched on and red when it is off (for example after its on/off button), checked about once per second; grey means its state is unknown or the controller is offline. Viewpoint controls change only the drawing.
 
 There is no separate Lights navigation tab. Geometry's Lights tab is for physical placement and connections; Devices contains operating settings and controls. Old `/lights` and `/nolu` links redirect to `/devices#lights`. Unsaved light edits stay with their controller when switching selections.
 

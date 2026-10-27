@@ -33,6 +33,7 @@ class LightingService:
         self.state = {
             "output_enabled": False,
             "controller_connected": False,
+            "controller_on": None,
             "controller_pixels": None,
             "error": None,
             "frames_sent": 0,
@@ -359,13 +360,40 @@ class LightingService:
                 or 12,
             }
 
+    def poll_power(self, controller):
+        """Read the lamp's own on/off state; its button can change it.
+
+        Returns the delay before the next poll, backing off while offline so
+        failed requests do not hold the lock every second.
+        """
+        with self.lock:
+            try:
+                status = self.rpc(
+                    controller,
+                    "LedStrip.GetStatus",
+                    id=controller["component_id"],
+                )
+            except (requests.RequestException, ValueError):
+                self.state["controller_on"] = None
+                return 5
+            power = status.get("on") if isinstance(status, dict) else None
+            self.state["controller_on"] = (
+                power if isinstance(power, bool) else None
+            )
+            return 1
+
     def run(self):
         poll_at = 0
+        power_at = 0
         sequence = 0
         while not self.stop_event.is_set():
             try:
                 state = self.installation.snapshot(include_lighting=False)
                 config = state["config"]["lighting"]
+                if time.monotonic() >= power_at:
+                    power_at = time.monotonic() + self.poll_power(
+                        config["controller"]
+                    )
                 frame = self.preview(config, state["tracks"])
                 with self.lock:
                     if frame["generation"] != self.generation:
@@ -419,7 +447,9 @@ class LightingService:
                     if self.program is not None:
                         self.state["program_error"] = str(exc)
                     self.state.update(
-                        error=str(exc), controller_connected=False
+                        error=str(exc),
+                        controller_connected=False,
+                        controller_on=None,
                     )
                     if self.state["output_enabled"]:
                         try:

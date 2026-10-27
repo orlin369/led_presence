@@ -11,6 +11,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
+import requests
+
 from led_presence.core.installation import Installation
 from led_presence.lights.controller_config import controller_config
 from led_presence.web.app import create_app
@@ -201,6 +203,24 @@ class ControllerTests(unittest.TestCase):
                 )
             finally:
                 installation.close()
+
+    def test_lamp_power_state_is_reported_and_unknown_when_offline(self):
+        service = self.installation.lighting.services["lights-1"]
+        controller = self.installation.config["lighting"]["controllers"][0][
+            "controller"
+        ]
+        for status, expected in (
+            ({"on": True, "effect": "ddp"}, True),
+            ({"on": False, "effect": "ddp"}, False),
+            ({"effect": "ddp"}, None),
+        ):
+            service.rpc = Mock(return_value=status)
+            self.assertEqual(service.poll_power(controller), 1)
+            frame = self.installation.snapshot()["lighting"]["controllers"][0]
+            self.assertIs(frame["controller_on"], expected)
+        service.rpc = Mock(side_effect=requests.ConnectionError("offline"))
+        self.assertEqual(service.poll_power(controller), 5)
+        self.assertIsNone(service.state["controller_on"])
 
     def two_streams_rpc(self, controller, method, **params):
         if method == "LedStrip.GetConfig":
