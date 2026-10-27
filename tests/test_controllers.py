@@ -1,17 +1,24 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Test independent controllers, shared products and registry migrations."""
+
 import copy
 import json
-from pathlib import Path
 import socket
 import tempfile
 import threading
 import unittest
+from pathlib import Path
 from unittest.mock import Mock
 
-from app import create_app, Installation
-from light_controllers import controller_config
+from led_presence.core.installation import Installation
+from led_presence.lights.controller_config import controller_config
+from led_presence.web.app import create_app
 
 
 class ControllerTests(unittest.TestCase):
+    """Verify multi-controller behaviour with mocks and loopback UDP."""
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.app = create_app(self.directory.name, start_worker=False)
@@ -39,14 +46,24 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(len({bar["key"] for bar in state["bars"]}), 18)
         self.assertEqual(state["controllers"][1]["controller"][0], 2300)
         self.assertEqual(len(self.config["lighting"]["products"]), 1)
-        self.assertEqual({g["product_id"] for g in self.config["lighting"]["controllers"]}, {self.config["lighting"]["products"][0]["id"]})
+        self.assertEqual(
+            {g["product_id"] for g in self.config["lighting"]["controllers"]},
+            {self.config["lighting"]["products"][0]["id"]},
+        )
 
-    def test_change_stops_only_affected_controller_and_disable_closes_reader(self):
+    def test_change_stops_only_affected_controller_and_disable_closes_reader(
+        self,
+    ):
         self.two_controllers()
-        first, second = [self.installation.lighting.services[key] for key in ("lights-1", "lights-2")]
+        first, second = [
+            self.installation.lighting.services[key]
+            for key in ("lights-1", "lights-2")
+        ]
         first.stop_output = Mock(wraps=first.stop_output)
         second.stop_output = Mock(wraps=second.stop_output)
-        self.config["lighting"]["controllers"][0]["controller"]["mounting"]["left_wall"] += 100
+        self.config["lighting"]["controllers"][0]["controller"]["mounting"][
+            "left_wall"
+        ] += 100
         self.installation.save(self.config)
         first.stop_output.assert_called_once()
         second.stop_output.assert_not_called()
@@ -68,26 +85,43 @@ class ControllerTests(unittest.TestCase):
 
     def test_invalid_registry_and_explicit_output_selection(self):
         self.two_controllers()
-        self.assertEqual(self.client.post("/api/lighting/output", json={"enabled": True}).status_code, 400)
+        self.assertEqual(
+            self.client.post(
+                "/api/lighting/output", json={"enabled": True}
+            ).status_code,
+            400,
+        )
         for change in ("id", "address", "product"):
             config = copy.deepcopy(self.config)
             first, second = config["lighting"]["controllers"]
             if change == "id":
                 second["id"] = first["id"]
             elif change == "address":
-                second["controller"]["device_host"] = first["controller"]["device_host"]
+                second["controller"]["device_host"] = first["controller"][
+                    "device_host"
+                ]
             else:
                 second["product_id"] = "missing"
-            self.assertEqual(self.client.put("/api/config", json=config).status_code, 400)
+            self.assertEqual(
+                self.client.put("/api/config", json=config).status_code, 400
+            )
 
     def test_empty_registry_and_disabled_output(self):
         self.two_controllers()
         self.config["lighting"]["controllers"][1]["enabled"] = False
         self.installation.save(self.config)
-        self.assertEqual(self.client.post("/api/lighting/output", json={"enabled": True, "controller_id": "lights-2"}).status_code, 400)
+        self.assertEqual(
+            self.client.post(
+                "/api/lighting/output",
+                json={"enabled": True, "controller_id": "lights-2"},
+            ).status_code,
+            400,
+        )
         self.config["lighting"]["controllers"] = []
         self.installation.save(self.config)
-        self.assertEqual(self.client.get("/api/lighting").get_json()["controllers"], [])
+        self.assertEqual(
+            self.client.get("/api/lighting").get_json()["controllers"], []
+        )
         self.assertEqual(self.installation.lighting.services, {})
 
     def test_two_udp_streams_and_stopping_one_keeps_other_active(self):
@@ -95,31 +129,41 @@ class ControllerTests(unittest.TestCase):
         receivers = []
         for index, group in enumerate(self.config["lighting"]["controllers"]):
             receiver = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            receiver.bind(("127.0.0.1", 0));receiver.settimeout(3)
-            self.addCleanup(receiver.close);receivers.append(receiver)
-            group["controller"].update(device_host="127.0.0.1", component_id=index, ddp_port=receiver.getsockname()[1])
+            receiver.bind(("127.0.0.1", 0))
+            receiver.settimeout(3)
+            self.addCleanup(receiver.close)
+            receivers.append(receiver)
+            group["controller"].update(
+                device_host="127.0.0.1",
+                component_id=index,
+                ddp_port=receiver.getsockname()[1],
+            )
             group["animation"]["idle_pct"] = 10
-        self.config["lighting"]["products"][0].update(verified=True, pixels_per_bar=12)
+        self.config["lighting"]["products"][0].update(
+            verified=True, pixels_per_bar=12
+        )
         self.installation.save(self.config)
         workers = []
         for group in self.config["lighting"]["controllers"]:
             service = self.installation.lighting.services[group["id"]]
-            def rpc(controller, method, **params):
-                if method == "LedStrip.GetConfig":
-                    return {"num_leds": 108, "ddp_port": controller["ddp_port"], "effects": ["ddp", "fade"]}
-                if method == "LedStrip.GetStatus":
-                    return {"on": True, "brightness": 50, "effect": "fade"}
-                return None
-            service.rpc = Mock(side_effect=rpc)
-            response = self.client.post("/api/lighting/output", json={"enabled": True, "controller_id": group["id"]})
+            service.rpc = Mock(side_effect=self.two_streams_rpc)
+            response = self.client.post(
+                "/api/lighting/output",
+                json={"enabled": True, "controller_id": group["id"]},
+            )
             self.assertEqual(response.status_code, 200)
-            worker = threading.Thread(target=service.run, daemon=True);worker.start();workers.append(worker)
+            worker = threading.Thread(target=service.run, daemon=True)
+            worker.start()
+            workers.append(worker)
         try:
             for receiver in receivers:
                 packet, _ = receiver.recvfrom(2000)
                 self.assertEqual(len(packet), 334)
                 self.assertEqual(packet[0], 0x41)
-            response = self.client.post("/api/lighting/output", json={"enabled": False, "controller_id": "lights-1"})
+            response = self.client.post(
+                "/api/lighting/output",
+                json={"enabled": False, "controller_id": "lights-1"},
+            )
             self.assertEqual(response.status_code, 200)
             state = response.get_json()["controllers"]
             self.assertFalse(state[0]["output_enabled"])
@@ -135,7 +179,9 @@ class ControllerTests(unittest.TestCase):
         old = copy.deepcopy(self.config)
         old["schema_version"] = 5
         old["lighting"] = controller_config(self.config["lighting"], group)
-        old["lighting"]["controller"]["mounting"].update(left_wall=830, front_wall=1200, height=0)
+        old["lighting"]["controller"]["mounting"].update(
+            left_wall=830, front_wall=1200, height=0
+        )
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory, "config.json")
             path.write_text(json.dumps(old), encoding="utf-8")
@@ -143,12 +189,35 @@ class ControllerTests(unittest.TestCase):
             try:
                 new = installation.config
                 self.assertEqual(new["schema_version"], 6)
-                self.assertEqual(controller_config(new["lighting"], new["lighting"]["controllers"][0]), old["lighting"])
+                self.assertEqual(
+                    controller_config(
+                        new["lighting"], new["lighting"]["controllers"][0]
+                    ),
+                    old["lighting"],
+                )
                 self.assertEqual(new["sensors"], old["sensors"])
-                self.assertTrue(Path(directory, "config.v5.backup.json").exists())
+                self.assertTrue(
+                    Path(directory, "config.v5.backup.json").exists()
+                )
             finally:
                 installation.close()
 
+    def two_streams_rpc(self, controller, method, **params):
+        if method == "LedStrip.GetConfig":
+            return {
+                "num_leds": 108,
+                "ddp_port": controller["ddp_port"],
+                "effects": ["ddp", "fade"],
+            }
+        if method == "LedStrip.GetStatus":
+            return {"on": True, "brightness": 50, "effect": "fade"}
+        return None
+
+
+def main():
+    """Run this test module directly."""
+    unittest.main()
+
 
 if __name__ == "__main__":
-    unittest.main()
+    main()

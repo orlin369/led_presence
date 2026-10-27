@@ -17,7 +17,7 @@ const color = (id, c) => palette[Math.max(0, c.sensors.findIndex(s => s.id === i
 const viewpoint = document.createElement('select');
 viewpoint.id = 'viewpoint';
 for (const [value, text] of [
-  ['facing-sensor', 'FACING THE SELECTED SENSOR'],
+  ['facing-sensor', 'FACING THE REFERENCE SENSOR'],
   ['front', 'FROM FRONT REFERENCE WALL'],
   ['back', 'FROM BACK WALL'],
   ['left', 'FROM LEFT REFERENCE WALL'],
@@ -33,22 +33,16 @@ const viewControl = document.createElement('label');
 viewControl.className = 'view-control'; viewControl.htmlFor = 'viewpoint';
 viewControl.append('Viewpoint', viewpoint);
 $('map').before(viewControl);
-const sensorSelect = document.createElement('select');
-sensorSelect.id = 'map-sensor';
-const sensorControl = document.createElement('label');
-sensorControl.className = 'view-control'; sensorControl.htmlFor = 'map-sensor';
-sensorControl.append('Reference sensor', sensorSelect);
-$('map').before(sensorControl);
 let animationState={running:false},animationBusy=false,animationAction='',animationMessage='';
 let animationToggle,animationStatus,animationSelect;
 if(!form) {
   const controls=document.createElement('div');controls.className='sensor-program-control';
-  sensorControl.replaceWith(controls);sensorControl.className='sensor-picker';
+  $('map').before(controls);
   animationToggle=document.createElement('button');animationToggle.id='animation-toggle';animationToggle.type='button';animationToggle.textContent='Start animation';animationToggle.disabled=true;
   animationStatus=document.createElement('p');animationStatus.className='hint';animationStatus.id='animation-status';animationStatus.setAttribute('role','status');
   animationSelect=document.createElement('select');animationSelect.id='animation-select';animationSelect.disabled=true;
   const animationLabel=document.createElement('label');animationLabel.className='animation-picker';animationLabel.htmlFor='animation-select';animationLabel.append('Animation',animationSelect);
-  controls.append(sensorControl,animationToggle,animationLabel,animationStatus);
+  controls.append(animationLabel,animationToggle,animationStatus);
   animationToggle.addEventListener('click',()=>applyAnimation(!(animationState.running||animationState.restoration_pending?.length)));
   animationSelect.addEventListener('change',()=>{
     try{localStorage.setItem('led-presence-animation',animationSelect.value);}catch{}
@@ -59,7 +53,7 @@ if(!form) {
     animationBusy=true;animationAction=enabled?(animationState.running?'Changing animation...':'Starting...'):'Stopping...';animationMessage='';
     if(latest)renderAnimationProgram(latest);
     try {
-      const response=await fetch('/api/animation',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled,sensor_id:selectedSensor,animation_id:animationSelect.value})});
+      const response=await fetch('/api/animation',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled,animation_id:animationSelect.value})});
       const result=await response.json();if(!response.ok)throw new Error(result.error);
       animationState=result;await poll();
     }catch(error){animationMessage=error.message;}
@@ -80,23 +74,15 @@ function renderAnimationProgram(state) {
   const selectedAnimation=animations.find(a=>a.id===animationSelect.value);
   animationSelect.title=selectedAnimation?.description||'';
   const active=animationState.running||animationState.restoration_pending?.length;
-  if(active&&animationState.sensor_id){selectedSensor=animationState.sensor_id;sensorSelect.value=selectedSensor;}
-  const sensor=state.sensors.find(s=>s.id===selectedSensor);
-  sensorSelect.disabled=!!active||animationBusy;
+  const sensor=state.sensors.find(s=>s.id===state.config.sensors[0]?.id);
   animationToggle.textContent=animationBusy?animationAction:active?'Stop animation':'Start animation';
   animationToggle.setAttribute('aria-pressed',String(!!animationState.running));
   const hasLights=state.config.lighting.controllers.some(c=>c.enabled);
   animationToggle.disabled=!!state.app_offline||animationBusy||(!active&&(!sensor?.connected||!hasLights));
   animationStatus.textContent=state.app_offline?'App connection lost; animation status unavailable.':animationMessage||animationState.error||(animationBusy?animationAction:active?
     `Running from ${sensor?.name||'sensor'} · ${animationState.controller_ids.length} controller(s)${sensor?.connected?'':' · sensor offline, fading out'}`:
-    !hasLights?'Enable a light controller on Devices.':!sensor?.connected?'Waiting for the selected sensor.':selectedAnimation?.description||'Ready · uses this sensor and all enabled light controllers.');
+    !hasLights?'Enable a light controller on Devices.':!sensor?.connected?'Waiting for the first sensor in Devices.':selectedAnimation?.description||'Ready · uses the first sensor and all enabled light controllers.');
 }
-sensorSelect.addEventListener('change', () => {
-  animationMessage='';
-  selectedSensor = sensorSelect.value;
-  if(form) for(const radio of form.querySelectorAll('input[name="selected-sensor"]')) radio.checked=radio.value===selectedSensor;
-  if(latest){renderAnimationProgram(latest);draw(latest);}
-});
 $('map').closest('.panel').querySelector('.hint').textContent = 'Top view · millimetres · wall names and measurements stay fixed as the view rotates';
 viewpoint.addEventListener('change', () => {
   try { localStorage.setItem('led-presence-viewpoint-v2', viewpoint.value); } catch {}
@@ -105,7 +91,7 @@ viewpoint.addEventListener('change', () => {
 
 function viewAngle(c) {
   if (viewpoint.value === 'facing-sensor') {
-    const sensor = c.sensors.find(s => s.id === selectedSensor);
+    const sensor = c.sensors[0];
     return sensor ? 180 - sensor.mounting.yaw : 180;
   }
   return {front:0, back:180, left:-90, right:90}[viewpoint.value] ?? 180;
@@ -133,11 +119,6 @@ function populate(c) {
   config = structuredClone(c);
   const sensors=sensorDirty?draft().sensors:c.sensors;
   if (!sensors.some(s => s.id === selectedSensor)) selectedSensor = sensors[0]?.id;
-  sensorSelect.replaceChildren();
-  for(const sensor of sensors) {
-    const option=document.createElement('option');option.value=sensor.id;option.textContent=sensor.name;sensorSelect.append(option);
-  }
-  sensorSelect.value=selectedSensor||'';
   if(roomForm&&!roomDirty) for(const name of roomFieldNames) {
     const input=roomForm.elements.namedItem(name),value=readPath(c,name);
     if(input.type==='checkbox')input.checked=value;else input.value=value;
@@ -153,7 +134,7 @@ function renderEditors(sensors) {
     editor.querySelector('legend').textContent = `${sensor.name} (${sensor.id})`;
     const radio = editor.querySelector('input[type=radio]');
     radio.value = sensor.id; radio.checked = selectedSensor === sensor.id;
-    radio.addEventListener('change', () => { selectedSensor = sensor.id; sensorSelect.value=sensor.id; if (latest) draw(latest); });
+    radio.addEventListener('change', () => { selectedSensor = sensor.id; if (latest) draw(latest); });
     for (const input of editor.querySelectorAll('[data-field]')) {
       if (input.type === 'checkbox') input.checked = readPath(sensor,input.dataset.field);
       else input.value = readPath(sensor,input.dataset.field);

@@ -9,7 +9,7 @@ Requires Python 3.12 or newer and network access to the devices.
 ```powershell
 Set-Location 'C:\Users\User\Documents\Git\orlin369\led_presence'
 .\.venv\Scripts\Activate.ps1
-python app.py
+python main.py
 ```
 
 If PowerShell blocks activation, allow local scripts for this window only:
@@ -24,7 +24,7 @@ First-time setup:
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe app.py
+.\.venv\Scripts\python.exe main.py
 ```
 
 Open **http://127.0.0.1:5000**. Stop with Ctrl+C; use `deactivate` to leave the environment. The app uses Flask's local development server on loopback without debug mode or the reloader. On macOS/Linux, use `.venv/bin/python`.
@@ -116,7 +116,7 @@ A controller-rooted tree can represent branches geometrically; match supported p
 
 ### Editable dashboard animation program
 
-The dashboard **Start animation** button sits directly after the reference-sensor dropdown. Choose a sensor and an effect in the **Animation** dropdown, then start the program. You can change effects while running; each controller clears its previous trail and blends into the new effect. The button becomes **Stop animation** and the sensor selection stays locked until stopped. Fresh tracks from that sensor drive every enabled light controller. The program runs on the server, so changing pages or closing the browser does not stop it; reloading the dashboard shows its current effect and state. App startup leaves it stopped.
+The first sensor in the Devices list is always the reference for the sensor-facing view and dashboard animation. There is no reference-sensor dropdown. Choose an effect in the **Animation** dropdown, then use **Start animation** beside it. You can change effects while running; each controller clears its previous trail and blends into the new effect. The button becomes **Stop animation**. Fresh tracks from the first sensor drive every enabled light controller. If it is disabled or offline, the app does not substitute another sensor. Changing the first sensor stops an active program; restart to use the new reference. The program runs on the server, so changing pages or closing the browser does not stop it; reloading the dashboard shows its current effect and state. App startup leaves it stopped.
 
 Available effects:
 
@@ -125,14 +125,14 @@ Available effects:
 - **Ripples:** waves spread out from each person's projected position along the lights.
 - **Fireflies:** clusters of twinkling sparks follow people.
 
-All effects fade to black without fresh tracks. The browser remembers the last dropdown choice; a new browser defaults to Spotlight. Effects and their labels are defined in `presence_animation.py` (`ANIMATIONS`); `context.animation_id` selects the renderer. Restart the app after editing this file.
+All effects fade to black without fresh tracks. The browser remembers the last dropdown choice; a new browser defaults to Spotlight. Effects and their labels are defined in `led_presence/animations/presence_animation.py` (`ANIMATIONS`); `context.animation_id` selects the renderer. Restart the app after editing this file.
 
-Edit **[presence_animation.py](presence_animation.py)** while the application is stopped:
+Edit **[led_presence/animations/presence_animation.py](led_presence/animations/presence_animation.py)** while the application is stopped:
 
 ```powershell
-# Stop the app with Ctrl+C first, then edit presence_animation.py.
-python -m py_compile presence_animation.py
-python app.py
+# Stop the app with Ctrl+C first, then edit led_presence/animations/presence_animation.py.
+python -m py_compile led_presence/animations/presence_animation.py
+python main.py
 ```
 
 The file is imported once at startup. There is no hot reload or browser code editor. Its `render(context)` function receives elapsed time, the configured LED count, the selected sensor, fresh room-coordinate tracks, room dimensions and controller settings. Return exactly `pixel_count` RGB triples, with integer channels from 0 to 255. Keep the function fast and non-blocking; the app handles transport, smoothing and restoration.
@@ -161,16 +161,57 @@ Multiple controllers share this room. Separate installations can use another con
 
 ```powershell
 $env:LED_PRESENCE_INSTANCE = 'C:\LED-Presence\room-b'
-.\.venv\Scripts\python.exe -m flask --app 'app:create_app()' run --host 127.0.0.1 --port 5001
+.\.venv\Scripts\python.exe -m flask --app 'led_presence.web.app:create_app()' run --host 127.0.0.1 --port 5001
 ```
 
 Do not enable the reloader, which duplicates device readers and animation workers.
 
+## Development rules
+
+The project rules are in [AGENTS.md](AGENTS.md). Python uses PEP 8, a
+portable interpreter line and UTF-8 declaration, one class per module,
+and module-level helpers instead of nested functions. `main.py` enters
+through `main()`; `led_presence/web/app.py` contains the Flask factory and HTTP handlers.
+Imports do not start device workers. Configuration, connections and
+streaming live in separate modules. `.editorconfig` sets UTF-8 and spaces.
+
+Python application code uses the `led_presence` package namespace, with
+absolute imports and minimal package initializers. Keep new modules in the
+package for their responsibility:
+
+```text
+main.py                         # Launcher: main()
+led_presence/
+  core/                         # Installation, room geometry, shared paths
+  config/                       # Installation validation and migrations
+  sensors/                      # Sensor readers
+  lights/                       # Controller configuration, geometry, output
+  animations/                   # Editable presence effects
+  web/                          # Flask factory and HTTP handlers
+    templates/                  # Page templates
+    static/                     # JavaScript and CSS
+tests/                          # Isolated functional and convention checks
+```
+
+For example: `from led_presence.sensors.sensor_reader import SensorReader`.
+Only the launcher belongs at the repository root; avoid flat helper modules
+or changes to `sys.path` to work around package imports.
+
+Install development tools into the virtual environment:
+
+```powershell
+python -m pip install -r requirements-dev.txt
+```
+
 ## Checks
 
 ```powershell
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m ruff format --check .
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
+
+Use `python -m ruff format .` to format Python files. The test suite also checks headers, one class per file, function scope and the `main()` entry point.
 
 Tests cover coordinate transforms, migration, registry validation, separate locations, shared products, independent output, simultaneous loopback UDP streams, stopping one while another continues, effect restoration, bar geometry, DDP framing, the editable animation contract, selected-sensor filtering, all-controller preflight/rollback, source changes and recovery from invalid program output.
 

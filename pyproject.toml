@@ -1,0 +1,10 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 79
+extend-exclude = ["instance", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.ruff.format]
+docstring-code-format = true
