@@ -38,6 +38,10 @@ data, virtual environments and third-party dependencies are excluded.
   network timeouts and restore the previous light state when output stops.
 - Document public modules, classes and non-obvious behaviour. Explain the
   reason for unusual transforms or protocol details in comments.
+- When a diagram helps explain architecture, data flow or device connections,
+  prefer Mermaid (MMD). Store standalone diagrams as `.mmd` files under
+  `docs/diagrams/`, or embed them in Markdown using `mermaid` code fences.
+  Keep diagrams consistent with the implementation.
 - Add meaningful tests for behaviour changes. Tests use temporary instance
   directories and mocked hardware or loopback networking.
 - Before finishing, run the style, structure and test commands in README.md.
