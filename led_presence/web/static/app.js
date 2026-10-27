@@ -80,7 +80,7 @@ function renderAnimationProgram(state) {
   const hasLights=state.config.lighting.controllers.some(c=>c.enabled);
   animationToggle.disabled=!!state.app_offline||animationBusy||(!active&&(!sensor?.connected||!hasLights));
   animationStatus.textContent=state.app_offline?'App connection lost; animation status unavailable.':animationMessage||animationState.error||(animationBusy?animationAction:active?
-    `Running from ${sensor?.name||'sensor'} · ${animationState.controller_ids.length} controller(s)${sensor?.connected?'':' · sensor offline, fading out'}`:
+    (sensor?.connected?'':'Sensor offline, fading out.'):
     !hasLights?'Enable a light controller on Devices.':!sensor?.connected?'Waiting for the first sensor in Devices.':selectedAnimation?.description||'Ready · uses the first sensor and all enabled light controllers.');
 }
 $('map').closest('.panel').querySelector('.hint').textContent = 'Top view · millimetres · wall names and measurements stay fixed as the view rotates';
