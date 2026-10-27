@@ -13,7 +13,9 @@ def place_track(track, sensor):
         "sensor_id": sensor["id"],
         "sensor_name": sensor["name"],
         "track_key": f'{sensor["id"]}:{track["id"]}',
-        "room_x_mm": mounting["left_wall"] + x * math.cos(angle) - y * math.sin(angle),
+        # Room X starts at the viewer's LEFT REFERENCE WALL when facing the sensor.
+        # The device's reported +X points in the opposite horizontal direction.
+        "room_x_mm": mounting["left_wall"] - x * math.cos(angle) + y * math.sin(angle),
         "room_y_mm": mounting["front_wall"] + x * math.sin(angle) + y * math.cos(angle),
         "reported_mm": reported,
     }

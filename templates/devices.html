@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-intro"><h2>Devices</h2><p class="hint">Register sensors and light controllers here. Light previews, animation settings and output controls are below; physical positions and connections are on Geometry.</p></div>
+<form id="devices-settings">
+  <section class="panel"><div class="sensor-toolbar"><h2>Presence sensors</h2><button type="button" id="add-device-sensor" class="secondary">+ Add sensor</button></div><div id="device-sensors" class="device-list"></div></section>
+  <section class="panel data"><div class="sensor-toolbar"><h2>Light controllers</h2><button type="button" id="add-device-light" class="secondary">+ Add controller</button></div><p class="hint">Each controller gets its own location, bar layout, animation and independent output connection.</p><div id="device-lights" class="device-list"></div></section>
+  <button type="submit" class="device-save">Save devices</button><p id="devices-save-status" role="status"></p>
+</form>
+<div id="lights" class="data">{% include 'lighting.html' %}</div>
+{% endblock %}

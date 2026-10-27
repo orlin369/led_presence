@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-intro"><span class="eyebrow">INSTALLATION SETUP</span><h2>Geometry</h2><p class="hint">Room dimensions, sensor mounting and light placement. Saved settings are shared with the live dashboard.</p></div>
+<div class="geometry-tabs" role="tablist" aria-label="Geometry settings">
+  <button type="button" role="tab" id="geometry-tab-room" aria-controls="geometry-panel-room" aria-selected="true">Room</button>
+  <button type="button" role="tab" id="geometry-tab-sensors" aria-controls="geometry-panel-sensors" aria-selected="false" tabindex="-1">Sensors</button>
+  <button type="button" role="tab" id="geometry-tab-lights" aria-controls="geometry-panel-lights" aria-selected="false" tabindex="-1">Lights</button>
+</div>
+<div class="workspace" id="room-sensor-workspace">
+{% include 'room-plan.html' %}
+<div class="geometry-editors">
+  <div role="tabpanel" id="geometry-panel-room" aria-labelledby="geometry-tab-room">{% include 'room-settings.html' %}</div>
+  <div role="tabpanel" id="geometry-panel-sensors" aria-labelledby="geometry-tab-sensors" hidden>{% include 'sensor-settings.html' %}{% include 'sensor-readings.html' %}</div>
+</div>
+</div>
+<div role="tabpanel" id="geometry-panel-lights" aria-labelledby="geometry-tab-lights" hidden>{% include 'lighting.html' %}</div>
+{% include 'sensor-template.html' %}
+{% endblock %}

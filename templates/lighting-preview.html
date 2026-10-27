@@ -1,0 +1,8 @@
+    <div><label>Preview view<select id="lighting-view"><option value="top">Top / room plan</option><option value="front">Front elevation (left wall → right)</option></select></label>
+      <svg id="lighting-preview" viewBox="0 0 640 460" role="img" aria-label="Presence-driven animation across the connected NOLU bars"></svg>
+      <p class="hint" id="lighting-preview-note"></p>
+      {% if devices_page %}<div class="lighting-actions"><button type="button" id="lighting-start">Start presence lighting</button><button type="button" id="lighting-stop" class="secondary">Stop & restore previous effect</button></div>{% endif %}
+      <p id="lighting-output-message" role="status" class="hint"></p>
+      <p class="hint">Preview uses live presence. Output runs on the server even with this page closed. Stop restores the controller's previous effect. Room presence and overlapping tracks are not a unique-person count.</p>
+      {% if geometry_page %}<p class="hint"><a href="{{ url_for('devices', _anchor='lights') }}">Open light settings and controls in Devices</a></p>{% endif %}
+    </div>

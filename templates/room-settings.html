@@ -1,0 +1,14 @@
+<section class="panel settings"><span class="eyebrow">ROOM GEOMETRY</span><h2>Room</h2>
+<p class="hint">Set the installation name, room dimensions and calibration notes. All distances are in mm.</p>
+<form id="room-settings">
+  <label>Installation name<input name="installation_name" required></label>
+  <h3>Room dimensions · mm</h3>
+  <div class="fields">
+    <label>Width<input type="number" step="any" min="1" max="1000000" name="room.width_mm" required></label>
+    <label>Depth<input type="number" step="any" min="1" max="1000000" name="room.depth_mm" required></label>
+    <label>Height<input type="number" step="any" min="1" max="1000000" name="room.height_mm" required></label>
+  </div>
+  <label>Physical / calibration notes<textarea name="physical.notes" rows="3"></textarea></label>
+  <label class="checkbox"><input type="checkbox" name="calibrated"> I have measured and verified this geometry</label>
+  <button type="submit">Save room</button><p id="room-save-status" role="status"></p>
+</form></section>

@@ -1,0 +1,28 @@
+<section class="panel" id="lighting-section">
+  <div class="panel-heading"><div><span class="eyebrow">PRESENCE / LIGHT</span><h2>{% if geometry_page %}Light geometry{% else %}Presence lighting{% endif %}</h2></div><span class="tag" id="lighting-status">Preview only</span></div>
+  <label class="controller-picker">Light controller<select id="light-controller" aria-label="Light controller"></select></label>
+  <p id="no-light-controllers" class="hint" hidden>Add a light controller on the <a href="{{ url_for('devices') }}">Devices page</a> first.</p>
+  <p class="hint">{% if geometry_page %}Set this controller's location and bar connections. Product dimensions are shared by controllers using the same bar type.{% else %}Select a controller to preview its presence animation and control its output independently.{% endif %}</p>
+  <div id="controller-status" class="sensor-status"></div>
+  <div class="lighting-workspace">
+    {% include 'lighting-preview.html' %}
+    <form id="lighting-settings">
+{% if geometry_page %}<h3>Controller location</h3>
+
+      <div class="fields"><label>From LEFT REFERENCE WALL · mm<input type="number" step="any" data-light="controller.mounting.left_wall" required></label><label>From FRONT REFERENCE WALL · mm<input type="number" step="any" data-light="controller.mounting.front_wall" required></label><label>Above floor · mm<input type="number" step="any" data-light="controller.mounting.height" required></label><label>Yaw · °<input type="number" step="any" data-light="controller.mounting.yaw" required></label><label>Pitch · °<input type="number" step="any" data-light="controller.mounting.pitch" required></label><label>Roll · °<input type="number" step="any" data-light="controller.mounting.roll" required></label></div>
+      <h3>Shared product · Shelly NOLU Bar</h3>
+      <div class="fields"><label>Length per bar · mm<input type="number" min="1" max="10000" step="any" data-light="product.length_mm" required></label><label>Pixels per bar<input type="number" min="0" max="1000" data-light="product.pixels_per_bar" required></label></div>
+      <p class="hint">The initial 300 mm length is an example. Zero pixels means unknown; preview temporarily uses 12 samples per bar. Enter the actual values once for all bars.</p>
+      <label class="checkbox"><input type="checkbox" data-light="product.verified"> I verified bar length and pixels per bar</label>
+      {% else %}<h3>Presence animation</h3>
+      <div class="fields"><label>Style<select data-light="animation.mode"><option value="aura">Presence aura</option><option value="ripple">Presence ripples</option></select></label><label>Max brightness · %<input type="number" min="0" max="100" data-light="animation.brightness_pct" required></label><label>Reach · mm<input type="number" min="1" max="20000" data-light="animation.radius_mm" required></label><label>Speed<input type="number" min="0.05" max="3" step="0.05" data-light="animation.speed" required></label><label>Fade · seconds<input type="number" min="0.05" max="10" step="0.05" data-light="animation.fade_seconds" required></label><label>Idle glow · %<input type="number" min="0" max="100" data-light="animation.idle_pct" required></label></div>
+
+      {% endif %}<p class="hint">Presence influence uses horizontal distance because the radar's vertical coordinates are not yet calibrated.</p>
+    </form>
+  </div>
+{% if geometry_page %}<div class="sensor-toolbar"><h3>Connections & electrical pixel order</h3><button type="button" id="add-bar" class="secondary">+ Add bar</button></div>
+  <p class="hint">Each bar starts at its parent's end. Controller yaw 0 points from FRONT REFERENCE WALL towards BACK WALL; positive joint yaw turns left. Pixel order is the actual electrical sequence from the controller, separate from the drawing. Reverse flips the pixels within one bar.</p>
+  <div class="table-wrap"><table class="bar-table"><thead><tr><th>Bar</th><th>Connected to</th><th>Pixel order</th><th>Yaw · °</th><th>Pitch · °</th><th>Roll · °</th><th>Reverse pixels</th><th></th></tr></thead><tbody id="bar-editors"></tbody></table></div>
+
+  {% endif %}<div class="lighting-save"><button type="submit" form="lighting-settings">{% if geometry_page %}Save light geometry{% else %}Save animation{% endif %}</button><p id="lighting-save-status" role="status"></p></div>
+</section>

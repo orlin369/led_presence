@@ -1,5 +1,8 @@
 const $ = id => document.getElementById(id);
-const form = $('settings');
+const form = $('settings'), roomForm = $('room-settings');
+let roomDirty=false, sensorDirty=false;
+const roomFieldNames=['installation_name','room.width_mm','room.depth_mm','room.height_mm','physical.notes','calibrated'];
+const sensorsTabActive=()=>!!form&&!$('geometry-panel-sensors')?.hidden;
 const palette = ['#b7ed86', '#6cdbec', '#f2b57d', '#c9a1ff', '#ff94bc', '#f0de7d'];
 let config, latest, dirty = false, mapBounds, selectedSensor;
 const readPath = (object, path) => path.split('.').reduce((value, key) => value[key], object);
@@ -14,24 +17,36 @@ const color = (id, c) => palette[Math.max(0, c.sensors.findIndex(s => s.id === i
 const viewpoint = document.createElement('select');
 viewpoint.id = 'viewpoint';
 for (const [value, text] of [
-  ['front', 'From front reference wall'],
-  ['facing-sensor', 'Facing the selected sensor (my view)'],
-  ['opposite', 'From opposite wall'],
-  ['left', 'From left reference wall'],
-  ['right', 'From right wall'],
+  ['facing-sensor', 'FACING THE SELECTED SENSOR'],
+  ['front', 'FROM FRONT REFERENCE WALL'],
+  ['back', 'FROM BACK WALL'],
+  ['left', 'FROM LEFT REFERENCE WALL'],
+  ['right', 'FROM RIGHT WALL'],
 ]) {
   const option = document.createElement('option');
   option.value = value; option.textContent = text; viewpoint.append(option);
 }
-try { viewpoint.value = localStorage.getItem('led-presence-viewpoint') || 'front'; } catch {}
-if (!viewpoint.value) viewpoint.value = 'front';
+viewpoint.value = 'facing-sensor';
+try { viewpoint.value = localStorage.getItem('led-presence-viewpoint-v2') || 'facing-sensor'; } catch {}
+if (!viewpoint.value) viewpoint.value = 'facing-sensor';
 const viewControl = document.createElement('label');
 viewControl.className = 'view-control'; viewControl.htmlFor = 'viewpoint';
 viewControl.append('Viewpoint', viewpoint);
 $('map').before(viewControl);
+const sensorSelect = document.createElement('select');
+sensorSelect.id = 'map-sensor';
+const sensorControl = document.createElement('label');
+sensorControl.className = 'view-control'; sensorControl.htmlFor = 'map-sensor';
+sensorControl.append('Reference sensor', sensorSelect);
+$('map').before(sensorControl);
+sensorSelect.addEventListener('change', () => {
+  selectedSensor = sensorSelect.value;
+  if(form) for(const radio of form.querySelectorAll('input[name="selected-sensor"]')) radio.checked=radio.value===selectedSensor;
+  if(latest) draw(latest);
+});
 $('map').closest('.panel').querySelector('.hint').textContent = 'Top view · millimetres · wall names and measurements stay fixed as the view rotates';
 viewpoint.addEventListener('change', () => {
-  try { localStorage.setItem('led-presence-viewpoint', viewpoint.value); } catch {}
+  try { localStorage.setItem('led-presence-viewpoint-v2', viewpoint.value); } catch {}
   if (latest) draw(latest);
 });
 
@@ -40,7 +55,7 @@ function viewAngle(c) {
     const sensor = c.sensors.find(s => s.id === selectedSensor);
     return sensor ? 180 - sensor.mounting.yaw : 180;
   }
-  return {front:0, opposite:180, left:90, right:-90}[viewpoint.value] ?? 0;
+  return {front:0, back:180, left:-90, right:90}[viewpoint.value] ?? 180;
 }
 
 function mapProjection(points, degrees) {
@@ -63,13 +78,18 @@ function mapProjection(points, degrees) {
 
 function populate(c) {
   config = structuredClone(c);
-  if (!c.sensors.some(s => s.id === selectedSensor)) selectedSensor = c.sensors[0]?.id;
-  for (const name of ['installation_name', 'room.width_mm', 'room.depth_mm', 'room.height_mm', 'physical.notes', 'calibrated']) {
-    const el = form.elements.namedItem(name);
-    const value = name.split('.').reduce((o, key) => o[key], c);
-    if (el.type === 'checkbox') el.checked = value; else el.value = value;
+  const sensors=sensorDirty?draft().sensors:c.sensors;
+  if (!sensors.some(s => s.id === selectedSensor)) selectedSensor = sensors[0]?.id;
+  sensorSelect.replaceChildren();
+  for(const sensor of sensors) {
+    const option=document.createElement('option');option.value=sensor.id;option.textContent=sensor.name;sensorSelect.append(option);
   }
-  renderEditors(c.sensors);
+  sensorSelect.value=selectedSensor||'';
+  if(roomForm&&!roomDirty) for(const name of roomFieldNames) {
+    const input=roomForm.elements.namedItem(name),value=readPath(c,name);
+    if(input.type==='checkbox')input.checked=value;else input.value=value;
+  }
+  if(form&&!sensorDirty)renderEditors(c.sensors);
 }
 
 function renderEditors(sensors) {
@@ -77,15 +97,15 @@ function renderEditors(sensors) {
   for (const sensor of sensors) {
     const editor = $('sensor-template').content.firstElementChild.cloneNode(true);
     editor.dataset.id = sensor.id;
-    editor.querySelector('legend').textContent = sensor.id;
+    editor.querySelector('legend').textContent = `${sensor.name} (${sensor.id})`;
     const radio = editor.querySelector('input[type=radio]');
     radio.value = sensor.id; radio.checked = selectedSensor === sensor.id;
-    radio.addEventListener('change', () => { selectedSensor = sensor.id; if (latest) draw(latest); });
+    radio.addEventListener('change', () => { selectedSensor = sensor.id; sensorSelect.value=sensor.id; if (latest) draw(latest); });
     for (const input of editor.querySelectorAll('[data-field]')) {
       if (input.type === 'checkbox') input.checked = readPath(sensor,input.dataset.field);
       else input.value = readPath(sensor,input.dataset.field);
     }
-    editor.querySelector('.remove-sensor').addEventListener('click', () => {
+    editor.querySelector('.remove-sensor')?.addEventListener('click', () => {
       editor.remove();
       if (selectedSensor === sensor.id) {
         selectedSensor = $('sensor-editors').firstElementChild?.dataset.id;
@@ -100,11 +120,11 @@ function renderEditors(sensors) {
 
 function draft() {
   const c = structuredClone(config);
-  for (const name of ['installation_name', 'room.width_mm', 'room.depth_mm', 'room.height_mm', 'physical.notes', 'calibrated']) {
-    const el = form.elements.namedItem(name), keys = name.split('.'), key = keys.pop();
-    const parent = keys.reduce((o, k) => o[k], c);
-    parent[key] = el.type === 'checkbox' ? el.checked : el.type === 'number' ? Number(el.value) : el.value;
+  if(roomForm) for(const name of roomFieldNames) {
+    const input=roomForm.elements.namedItem(name);
+    writePath(c,name,input.type==='checkbox'?input.checked:input.type==='number'?Number(input.value):input.value);
   }
+  if(!form)return c;
   c.sensors = [...$('sensor-editors').children].map(editor => {
     const sensor = structuredClone(config.sensors.find(s => s.id === editor.dataset.id) || {id: editor.dataset.id});
     for (const input of editor.querySelectorAll('[data-field]')) {
@@ -122,7 +142,7 @@ function previewTracks(state, c) {
     if (!sensor || sensor.device_host !== saved?.device_host) return [];
     const angle = sensor.mounting.yaw * Math.PI / 180, p = track.reported_mm;
     return [{...track, sensor_name:sensor.name,
-      room_x_mm:sensor.mounting.left_wall+p.x_mm*Math.cos(angle)-p.y_mm*Math.sin(angle),
+      room_x_mm:sensor.mounting.left_wall-p.x_mm*Math.cos(angle)+p.y_mm*Math.sin(angle),
       room_y_mm:sensor.mounting.front_wall+p.x_mm*Math.sin(angle)+p.y_mm*Math.cos(angle)}];
   });
 }
@@ -132,12 +152,16 @@ function draw(state) {
   if (!(room.width_mm > 0 && room.depth_mm > 0)) return;
   const tracks = previewTracks(state, c);
   const corners = [{x:0,y:0},{x:room.width_mm,y:0},{x:room.width_mm,y:room.depth_mm},{x:0,y:room.depth_mm}];
+  const lighting = state.lighting;
+  const lightPoints = lighting ? [...lighting.controllers.map(c=>c.controller),...lighting.bars.flatMap(b=>[b.start,b.end])].map(p=>({x:p[0],y:p[1]})) : [];
   const points = [...corners, ...c.sensors.map(s=>({x:s.mounting.left_wall,y:s.mounting.front_wall})),
-    ...tracks.map(t=>({x:t.room_x_mm,y:t.room_y_mm}))];
+    ...tracks.map(t=>({x:t.room_x_mm,y:t.room_y_mm})),...lightPoints];
   if (!points.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y))) return;
-  const degrees = viewAngle(c), projection = mapProjection(points,degrees);
-  mapBounds = projection;
-  const point = (x,y) => projection.point(x,y);
+  const degrees = viewAngle(c);
+  // Convert viewer-reference coordinates into the existing camera projection.
+  const projection = mapProjection(points.map(p=>({x:room.width_mm-p.x,y:p.y})),degrees);
+  const point = (x,y) => projection.point(room.width_mm-x,y);
+  mapBounds = {point,inverse(x,y){const p=projection.inverse(x,y);return{x:room.width_mm-p.x,y:p.y};}};
   const map = $('map'); map.replaceChildren();
   function add(tag, attrs, text) {
     const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
@@ -150,7 +174,7 @@ function draw(state) {
     add('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:'#2c4148'});
   }
   function label(x,y,dx,dy,offset,text,wall=false) {
-    const p=point(x,y), normal=projection.direction(dx,dy);
+    const p=point(x,y), normal=projection.direction(-dx,dy);
     const tx=p.x+normal.x*offset, ty=p.y+normal.y*offset;
     let rotation=wall?Math.atan2(-normal.x,normal.y)*180/Math.PI:0;
     if(rotation>90)rotation-=180;
@@ -161,7 +185,7 @@ function draw(state) {
   add('polygon',{points:corners.map(p=>{const v=point(p.x,p.y);return `${v.x},${v.y}`;}).join(' '),fill:'#192b30',stroke:'#68808a'});
   label(room.width_mm/2,0,0,-1,44,'FRONT REFERENCE WALL',true);
   label(0,room.depth_mm/2,-1,0,44,'LEFT REFERENCE WALL',true);
-  label(room.width_mm/2,room.depth_mm,0,1,32,'OPPOSITE WALL',true);
+  label(room.width_mm/2,room.depth_mm,0,1,32,'BACK WALL',true);
   label(room.width_mm,room.depth_mm/2,1,0,32,'RIGHT WALL',true);
   const step = Math.max(1, Math.ceil(Math.max(room.width_mm,room.depth_mm)/10000)*1000);
   for (let x=0; x<=room.width_mm; x+=step) {
@@ -171,6 +195,19 @@ function draw(state) {
   for (let y=0; y<=room.depth_mm; y+=step) {
     line(0,y,room.width_mm,y);
     label(0,y,-1,0,20,y);
+  }
+  if(lighting) {
+    for(const bar of lighting.bars) {
+      const a=point(bar.start[0],bar.start[1]),b=point(bar.end[0],bar.end[1]);
+      add('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:'#536873','stroke-width':10,'stroke-linecap':'round'});
+      add('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:`rgb(${bar.color.join(',')})`,'stroke-width':6,'stroke-linecap':'round'});
+      add('text',{x:(a.x+b.x)/2,y:(a.y+b.y)/2+18,fill:'#a8c6cf','font-size':10,'text-anchor':'middle'},`${bar.controller_name}: ${bar.id}`);
+    }
+    for(const controller of lighting.controllers){
+    const root=point(controller.controller[0],controller.controller[1]);
+    add('rect',{x:root.x-6,y:root.y-6,width:12,height:12,rx:2,fill:'#8eb4c6'});
+    add('text',{x:root.x+10,y:root.y-10,fill:'#8eb4c6','font-size':10},controller.name);
+    }
   }
   for (const s of c.sensors) {
     const fill = color(s.id,c);
@@ -197,12 +234,14 @@ function draw(state) {
 
 function render(state) {
   latest = state;
-  if (!config || (!dirty && JSON.stringify(config) !== JSON.stringify(state.config))) populate(state.config);
-  $('name').textContent = state.config.installation_name;
+  if (!config || JSON.stringify(config) !== JSON.stringify(state.config)) populate(state.config);
   const active=state.sensors.filter(s=>s.enabled), online=active.filter(s=>s.connected);
-  $('connection').textContent=`${online.length} / ${active.length} sensors connected`;
-  $('connection').className=online.length===active.length && active.length?'':'error';
+  if($('connection')) {
+    $('connection').textContent=`${online.length} / ${active.length} sensors connected`;
+    $('connection').className=online.length===active.length && active.length?'':'error';
+  }
   $('calibration').textContent=state.config.calibrated?'Geometry verified':'Uncalibrated geometry';
+  if($('count')) {
   const fresh=online.filter(s=>!s.stale);
   $('count').textContent=fresh.length?state.tracks.length:'—';
   $('online').textContent=`${online.length} / ${active.length}`;
@@ -211,20 +250,6 @@ function render(state) {
   const complete=active.length && online.length===active.length && online.every(s=>s.zones.length && s.zones.every(z=>typeof z.occupied==='boolean'));
   $('occupancy').textContent=occupied?'Occupied':complete?'Clear':'Unknown';
   $('coverage').textContent=complete?'All enabled sensors reporting':'Partial sensor coverage';
-  $('sensor-status').replaceChildren();
-  for (const sensor of state.sensors) {
-    const card=document.createElement('article');
-    const heading=document.createElement('h3');heading.textContent=sensor.name;heading.style.color=color(sensor.id,state.config);card.append(heading);
-    const lines=[`${sensor.device_host} · ${!sensor.enabled?'Disabled':sensor.connected?'Connected':'Offline'}`,
-      sensor.connected?(sensor.stale?'Waiting for fresh tracks':`${sensor.tracks.length} live tracks`):sensor.error||'Waiting for connection'];
-    if(sensor.connected) {
-      lines.push(`Light: ${sensor.status['illuminance:0']?.illumination??'—'} · Wi-Fi: ${sensor.status.wifi?.rssi??'—'} dBm`);
-      lines.push(`Device mount: ${num(sensor.mounting.height_mm)} mm · tilt ${sensor.mounting.tilt_deg??'—'}°`);
-    }
-    for(const text of lines){const p=document.createElement('p');p.className='hint';p.textContent=text;card.append(p);}
-    $('sensor-status').append(card);
-  }
-  if(!state.sensors.length)$('sensor-status').textContent='No sensors configured. Add a sensor in the installation form.';
   $('tracks').replaceChildren();
   for (const t of state.tracks) {
     const row=document.createElement('tr'), p=t.reported_mm;
@@ -238,12 +263,31 @@ function render(state) {
     cell.textContent=fresh.length?'No objects currently tracked.':'No fresh tracking data available.';row.append(cell);$('tracks').append(row);
   }
   $('raw').textContent=JSON.stringify({units:state.units,sensors:state.sensors},null,2);
+  }
+  if($('sensor-status')) {
+  $('sensor-status').replaceChildren();
+  for (const sensor of state.sensors) {
+    const card=document.createElement('article');
+    const heading=document.createElement('h3');heading.textContent=sensor.name;heading.style.color=color(sensor.id,state.config);card.append(heading);
+    const lines=[`${sensor.device_host} · ${!sensor.enabled?'Disabled':sensor.connected?'Connected':'Offline'}`,
+      sensor.connected?(sensor.stale?'Waiting for fresh tracks':`${sensor.tracks.length} live tracks`):sensor.error||'Waiting for connection'];
+    if(sensor.connected) {
+      lines.push(`Light: ${sensor.status['illuminance:0']?.illumination??'—'} · Wi-Fi: ${sensor.status.wifi?.rssi??'—'} dBm`);
+      lines.push(`Device mount: ${num(sensor.mounting.height_mm)} mm · tilt ${sensor.mounting.tilt_deg??'—'}°`);
+    }
+    for(const text of lines){const p=document.createElement('p');p.className='hint';p.textContent=text;card.append(p);}
+    $('sensor-status').append(card);
+  }
+  if(!state.sensors.length)$('sensor-status').textContent='No sensors configured. Add a sensor on the Geometry page.';
+  }
+  if(window.LightingUI) window.LightingUI.update(state);
   draw(state);
 }
 
-function changed(){dirty=true;$('save-status').textContent='Unsaved changes.';if(latest)draw(latest);}
-form.addEventListener('input',event=>{if(event.target.name!=='selected-sensor')changed();});
-$('add-sensor').addEventListener('click',()=>{
+function changed(){sensorDirty=true;dirty=true;$('save-status').textContent='Unsaved sensor changes.';if(latest)draw(latest);}
+roomForm?.addEventListener('input',()=>{roomDirty=true;dirty=true;$('room-save-status').textContent='Unsaved room changes.';if(latest)draw(latest);});
+form?.addEventListener('input',event=>{if(event.target.name!=='selected-sensor')changed();});
+$('add-sensor')?.addEventListener('click',()=>{
   if(!config)return;
   const c=draft();
   if(c.sensors.length>=32){$('save-status').textContent='Maximum 32 sensors.';return;}
@@ -253,7 +297,7 @@ $('add-sensor').addEventListener('click',()=>{
   selectedSensor=id;renderEditors(c.sensors);changed();
 });
 $('map').addEventListener('click',event=>{
-  if(!mapBounds||!config||!selectedSensor)return;
+  if(!sensorsTabActive()||!mapBounds||!config||!selectedSensor)return;
   const editor=[...$('sensor-editors').children].find(el=>el.dataset.id===selectedSensor);if(!editor)return;
   const point=$('map').createSVGPoint();point.x=event.clientX;point.y=event.clientY;
   const p=point.matrixTransform($('map').getScreenCTM().inverse());
@@ -261,16 +305,57 @@ $('map').addEventListener('click',event=>{
   editor.querySelector('[data-field="mounting.left_wall"]').value=Math.round(roomPoint.x);
   editor.querySelector('[data-field="mounting.front_wall"]').value=Math.round(roomPoint.y);changed();
 });
-form.addEventListener('submit',async event=>{
-  event.preventDefault();
+async function saveGeometry(scope) {
+  const status=scope==='room'?$('room-save-status'):$('save-status');
   try {
-    const response=await fetch('/api/config',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(draft())});
+    const current=await fetch('/api/config',{cache:'no-store'});
+    if(!current.ok)throw new Error('Could not read installation');
+    const merged=await current.json(),edited=draft();
+    const keys=scope==='room'?['installation_name','room','physical','calibrated']:['sensors'];
+    for(const key of keys){
+      if(key==='sensors')for(const sensor of merged.sensors){const draftSensor=edited.sensors.find(s=>s.id===sensor.id);if(draftSensor)sensor.mounting=draftSensor.mounting;}
+      else merged[key]=edited[key];
+    }
+    const response=await fetch('/api/config',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(merged)});
     const result=await response.json();if(!response.ok)throw new Error(result.error);
-    populate(result);dirty=false;$('save-status').textContent='Installation saved on this machine.';await poll();
-  }catch(error){$('save-status').textContent='Could not save: '+error.message;}
-});
+    if(scope==='room')roomDirty=false;else sensorDirty=false;
+    dirty=roomDirty||sensorDirty;populate(result);
+    status.textContent=scope==='room'?'Room saved.':'Sensors saved.';
+    await poll();
+  }catch(error){status.textContent='Could not save: '+error.message;}
+}
+form?.addEventListener('submit',event=>{event.preventDefault();saveGeometry('sensors');});
+roomForm?.addEventListener('submit',event=>{event.preventDefault();saveGeometry('room');});
+
+if(roomForm) {
+  const tabs=[...document.querySelectorAll('.geometry-tabs [role=tab]')];
+  function activateGeometryTab(name,updateHash=false) {
+    if(!['room','sensors','lights'].includes(name))name='room';
+    for(const tab of tabs) {
+      const active=tab.id===`geometry-tab-${name}`;
+      tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;
+      $(tab.getAttribute('aria-controls')).hidden=!active;
+    }
+    $('room-sensor-workspace').hidden=name==='lights';
+    $('map').style.cursor=name==='sensors'?'crosshair':'default';
+    $('geometry-placement-note').textContent=name==='sensors'?'Select a sensor and click the plan to edit its mounting position.':'Room preview. Open the Sensors tab to place a sensor.';
+    if(updateHash)history.replaceState(null,'',`#${name}`);
+  }
+  for(const [index,tab] of tabs.entries()) {
+    tab.addEventListener('click',()=>activateGeometryTab(tab.id.replace('geometry-tab-',''),true));
+    tab.addEventListener('keydown',event=>{
+      if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+      event.preventDefault();
+      const next=event.key==='Home'?0:event.key==='End'?tabs.length-1:(index+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;
+      tabs[next].focus();tabs[next].click();
+    });
+  }
+  window.addEventListener('hashchange',()=>activateGeometryTab(location.hash.slice(1)));
+  activateGeometryTab(location.hash.slice(1));
+}
+
 async function poll(){
   try{const response=await fetch('/api/state',{cache:'no-store',signal:AbortSignal.timeout(8000)});if(!response.ok)throw new Error('App unavailable');render(await response.json());}
-  catch(error){if(latest)render({...latest,tracks:[],sensors:latest.sensors.map(s=>({...s,connected:false,stale:true}))});$('connection').textContent='App connection lost';$('connection').className='error';}
+  catch(error){if(latest)render({...latest,tracks:[],sensors:latest.sensors.map(s=>({...s,connected:false,stale:true}))});if($('connection')){$('connection').textContent='App connection lost';$('connection').className='error';}}
 }
 async function loop(){await poll();setTimeout(loop,1000);}loop();

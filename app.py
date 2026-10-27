@@ -1,4 +1,5 @@
 import copy
+import atexit
 import ipaddress
 import json
 import math
@@ -8,11 +9,13 @@ import re
 import threading
 import time
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, redirect, render_template, request, url_for
 import requests
 import websocket
 
 from geometry import place_track
+from lighting import default_lighting
+from light_controllers import LightControllers, validate_controllers, wrap_single_lighting
 
 ROOT = Path(__file__).resolve().parent
 
@@ -33,12 +36,21 @@ def migrate_config(config):
                                   "left_wall": sensor.pop("x_mm"), "front_wall": sensor.pop("y_mm"),
                                   "yaw": sensor.pop("yaw_deg"), "pitch": sensor.pop("tilt_deg"), "roll": 0}
         result["schema_version"] = 3
+    if result.get("schema_version") == 3:
+        result["lighting"] = default_lighting()
+        result["schema_version"] = 4
+    if result.get("schema_version") == 4:
+        # Keep measured offsets; LEFT now means the reference wall in the sensor-facing view.
+        result["schema_version"] = 5
+    if result.get("schema_version") == 5:
+        result["lighting"] = wrap_single_lighting(result["lighting"])
+        result["schema_version"] = 6
     return result
 
 
 def validate_config(config):
-    if config.get("schema_version") != 3:
-        raise ValueError("schema_version must be 3 (nested mounting; distances in mm, angles in degrees)")
+    if config.get("schema_version") != 6:
+        raise ValueError("schema_version must be 6 (multiple light controllers; mm and degrees)")
     if not isinstance(config["installation_name"], str) or not config["installation_name"].strip():
         raise ValueError("Provide an installation name")
     if not isinstance(config["calibrated"], bool):
@@ -76,6 +88,7 @@ def validate_config(config):
             number(sensor["mounting"], key, positive=key == "height")
     if not isinstance(config["physical"]["notes"], str):
         raise ValueError("physical.notes must be text")
+    validate_controllers(config["lighting"])
     return config
 
 
@@ -190,13 +203,14 @@ class Installation:
             path.write_text((ROOT / "config.example.json").read_text(encoding="utf-8"), encoding="utf-8")
         original = json.loads(path.read_text(encoding="utf-8"))
         self.config = validate_config(migrate_config(original))
-        if original.get("schema_version") in (1, 2):
+        if original.get("schema_version") in (1, 2, 3, 4, 5):
             # Preserve the exact old configuration once, before persisting the migration.
             backup = path.with_name(f'config.v{original["schema_version"]}.backup.json')
             if not backup.exists():
                 backup.write_bytes(path.read_bytes())
             self.write_config(self.config)
         self.reconcile()
+        self.lighting = LightControllers(self, start_workers)
 
     def write_config(self, config):
         temporary = self.path.with_suffix(".tmp")
@@ -218,16 +232,19 @@ class Installation:
     def save(self, config):
         validate_config(config)
         with self.lock:
+            self.lighting.stop_changed(self.config["lighting"], config["lighting"])
             self.write_config(config)
             self.config = copy.deepcopy(config)
             self.reconcile()
+            self.lighting.reconcile(self.config["lighting"])
 
     def close(self):
+        self.lighting.close()
         with self.lock:
             for reader in self.readers.values():
                 reader.stop()
 
-    def snapshot(self):
+    def snapshot(self, include_lighting=True):
         with self.lock:
             config = copy.deepcopy(self.config)
             sensors = []
@@ -236,7 +253,10 @@ class Installation:
                 state = (reader or SensorReader(sensor)).snapshot(sensor)
                 sensors.append(state)
         live_tracks = [track for sensor in sensors if sensor["connected"] and not sensor["stale"] for track in sensor["tracks"]]
-        return {"config": config, "units": "mm", "sensors": sensors, "tracks": live_tracks}
+        result = {"config": config, "units": "mm", "sensors": sensors, "tracks": live_tracks}
+        if include_lighting:
+            result["lighting"] = self.lighting.preview(config["lighting"], live_tracks)
+        return result
 
 
 def create_app(instance_path=None, start_worker=True):
@@ -244,14 +264,52 @@ def create_app(instance_path=None, start_worker=True):
     app = Flask(__name__, instance_path=str(path))
     installation = Installation(path / "config.json", start_workers=start_worker)
     app.extensions["installation"] = installation
+    atexit.register(installation.close)
 
     @app.get("/")
     def index():
-        return render_template("index.html")
+        return render_template("index.html", geometry_page=False)
+
+    @app.get("/geometry")
+    def geometry():
+        return render_template("geometry.html", geometry_page=True)
+
+    @app.get("/devices")
+    def devices():
+        return render_template("devices.html", devices_page=True)
+
+    @app.get("/lights")
+    def lights():
+        return redirect(url_for("devices", _anchor="lights"))
+
+    @app.get("/nolu")
+    def nolu():
+        return redirect(url_for("devices", _anchor="lights"))
 
     @app.get("/api/state")
     def state():
         return jsonify(installation.snapshot())
+
+    @app.get("/api/lighting")
+    def lighting_state():
+        state = installation.snapshot(include_lighting=False)
+        return jsonify(installation.lighting.preview(state["config"]["lighting"], state["tracks"]))
+
+    @app.post("/api/lighting/output")
+    def lighting_output():
+        if request.headers.get("Origin") and request.headers["Origin"] != request.host_url.rstrip("/"):
+            return jsonify(error="Cross-origin writes are not allowed"), 403
+        if not request.is_json:
+            return jsonify(error="Send application/json"), 415
+        data = request.get_json()
+        if not isinstance(data, dict) or not isinstance(data.get("enabled"), bool):
+            return jsonify(error="enabled must be true or false"), 400
+        try:
+            with installation.lock:
+                installation.lighting.set_output(data["enabled"], installation.config["lighting"], data.get("controller_id"))
+        except (ValueError, requests.RequestException) as exc:
+            return jsonify(error=str(exc)), 400
+        return jsonify(installation.snapshot()["lighting"])
 
     @app.route("/api/config", methods=["GET", "PUT"])
     def config():

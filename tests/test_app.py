@@ -44,18 +44,75 @@ class AppTests(unittest.TestCase):
         self.assertTrue(state["sensors"][0]["stale"])
         self.assertEqual(state["tracks"], [])
 
+    def test_pages_have_separate_installation_editors(self):
+        pages = {}
+        for path in ("/", "/devices", "/geometry"):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200)
+            pages[path] = response.get_data(as_text=True)
+            for destination in ("/", "/devices", "/geometry"):
+                self.assertIn(f'href="{destination}"', pages[path])
+        dashboard, geometry, lights = pages["/"], pages["/geometry"], pages["/devices"]
+        self.assertEqual(self.client.get("/nolu").headers["Location"], "/devices#lights")
+        self.assertEqual(self.client.get("/lights").headers["Location"], "/devices#lights")
+        self.assertNotIn('id="settings"', dashboard)
+        self.assertNotIn('id="lighting-settings"', dashboard)
+        self.assertNotIn('id="bar-editors"', dashboard)
+        self.assertNotIn('id="lighting-start"', dashboard)
+        self.assertNotIn('id="lighting-preview"', dashboard)
+        self.assertNotIn('id="sensor-status"', dashboard)
+        self.assertNotIn('/static/lighting.js', dashboard)
+        self.assertIn('id="settings"', geometry)
+        self.assertIn('id="room-settings"', geometry)
+        self.assertIn('id="sensor-status"', geometry)
+        self.assertIn('role="tab" id="geometry-tab-room"', geometry)
+        self.assertIn('role="tab" id="geometry-tab-sensors"', geometry)
+        self.assertIn('id="geometry-panel-sensors" aria-labelledby="geometry-tab-sensors" hidden', geometry)
+        self.assertIn('id="lighting-settings"', geometry)
+        self.assertIn('id="bar-editors"', geometry)
+        self.assertIn('id="lighting-settings"', lights)
+        self.assertNotIn('id="bar-editors"', lights)
+        self.assertNotIn('data-light="product.length_mm"', lights)
+        self.assertIn('data-light="animation.mode"', lights)
+        self.assertIn('id="lighting-start"', lights)
+        self.assertIn('id="lighting-preview"', lights)
+        self.assertNotIn('id="settings"', lights)
+
     def test_mm_conversion_rotation_and_sensor_identity(self):
         sensor = self.config["sensors"][0]
         sensor["mounting"].update(left_wall=2000, front_wall=3000, yaw=90)
         original = {"id": 7, "x": 1, "y": 2, "z": -0.2, "minz": 1, "maxz": 2}
         track = place_track(original, sensor)
-        self.assertAlmostEqual(track["room_x_mm"], 0)
+        self.assertAlmostEqual(track["room_x_mm"], 4000)
         self.assertAlmostEqual(track["room_y_mm"], 4000)
         self.assertEqual(track["reported_mm"]["z_mm"], -200)
         self.assertEqual(track["reported_mm"]["minz_mm"], 1000)
         self.assertEqual(track["reported_mm"]["maxz_mm"], 2000)
         self.assertEqual(track["track_key"], "sensor-1:7")
         self.assertEqual(original["x"], 1)
+
+    def test_sensor_facing_left_reference_and_known_forward_position(self):
+        sensor = self.config["sensors"][0]
+        sensor["mounting"].update(left_wall=1700, front_wall=390, yaw=0)
+        forward = place_track({"id": 1, "x": 0, "y": 2}, sensor)
+        self.assertEqual(forward["room_x_mm"], 1700)
+        self.assertEqual(forward["room_y_mm"], 2390)
+        device_right = place_track({"id": 1, "x": 0.3, "y": 2}, sensor)
+        self.assertEqual(device_right["room_x_mm"], 1400)
+
+    def test_v4_wall_reference_migration_keeps_entered_measurements(self):
+        old = copy.deepcopy(self.config)
+        old["schema_version"] = 4
+        old["sensors"][0]["mounting"].update(left_wall=1700, front_wall=390, height=700)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, "config.json")
+            path.write_text(json.dumps(old), encoding="utf-8")
+            installation = Installation(path, start_workers=False)
+            self.assertEqual(installation.config["schema_version"], 6)
+            self.assertEqual(installation.config["sensors"], old["sensors"])
+            self.assertEqual(installation.config["lighting"], old["lighting"])
+            self.assertTrue(Path(directory, "config.v4.backup.json").exists())
+            installation.close()
 
     def test_configuration_persists_and_instances_are_isolated(self):
         self.two_sensors()
@@ -82,7 +139,7 @@ class AppTests(unittest.TestCase):
             original = path.read_bytes()
             installation = Installation(path, start_workers=False)
             saved = json.loads(path.read_text(encoding="utf-8"))
-            self.assertEqual(saved["schema_version"], 3)
+            self.assertEqual(saved["schema_version"], 6)
             self.assertEqual(saved["room"]["width_mm"], 5250)
             self.assertEqual(saved["sensors"][0]["mounting"]["left_wall"], 1250)
             self.assertEqual(saved["sensors"][0]["mounting"]["front_wall"], -500)
@@ -92,7 +149,7 @@ class AppTests(unittest.TestCase):
             self.assertEqual(saved["physical"]["notes"], "Keep this note")
             self.assertEqual(Path(directory, "config.v1.backup.json").read_bytes(), original)
             installation.close()
-            # Loading v3 again must not multiply distances a second time.
+            # Loading v5 again must not multiply distances a second time.
             installation = Installation(path, start_workers=False)
             self.assertEqual(installation.config["room"]["width_mm"], 5250)
             installation.close()
@@ -157,8 +214,8 @@ class AppTests(unittest.TestCase):
         state = self.installation.snapshot()
         self.assertEqual(len(state["tracks"]), 2)
         self.assertEqual({t["track_key"] for t in state["tracks"]}, {"sensor-1:1", "sensor-2:1"})
-        self.assertEqual(state["tracks"][0]["room_x_mm"], 4000)
-        self.assertAlmostEqual(state["tracks"][1]["room_x_mm"], -1000)
+        self.assertEqual(state["tracks"][0]["room_x_mm"], 2000)
+        self.assertAlmostEqual(state["tracks"][1]["room_x_mm"], 3000)
         # One sensor going offline or stale does not remove another sensor's tracks.
         second = self.installation.readers["sensor-2"]
         second.state["connected"] = False
@@ -175,7 +232,7 @@ class AppTests(unittest.TestCase):
         self.config["sensors"][0]["mounting"]["left_wall"] = 5000
         self.installation.save(self.config)
         self.assertIs(self.installation.readers["sensor-1"], reader)
-        self.assertEqual(self.installation.snapshot()["tracks"][0]["room_x_mm"], 6000)
+        self.assertEqual(self.installation.snapshot()["tracks"][0]["room_x_mm"], 4000)
 
     def test_add_disable_enable_readdress_remove_readers(self):
         self.two_sensors()

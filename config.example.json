@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 6,
   "installation_name": "LED Presence \u00b7 Local room",
   "calibrated": false,
   "room": {
@@ -25,5 +25,137 @@
   ],
   "physical": {
     "notes": "Measure the room and sensor placement before marking calibrated."
+  },
+  "lighting": {
+    "products": [
+      {
+        "id": "shelly-nolu-bar",
+        "name": "Shelly NOLU Bar",
+        "length_mm": 300,
+        "pixels_per_bar": 0,
+        "verified": false
+      }
+    ],
+    "controllers": [
+      {
+        "controller": {
+          "device_host": "192.168.88.182",
+          "component_id": 0,
+          "ddp_port": 4048,
+          "mounting": {
+            "height": 2000,
+            "left_wall": 100,
+            "front_wall": 100,
+            "yaw": 0,
+            "pitch": 0,
+            "roll": 0
+          }
+        },
+        "bars": [
+          {
+            "id": "bar-1",
+            "product_id": "shelly-nolu-bar",
+            "connected_to": "controller",
+            "wire_order": 1,
+            "yaw": -90,
+            "pitch": 0,
+            "roll": 0,
+            "reversed": false
+          },
+          {
+            "id": "bar-2",
+            "product_id": "shelly-nolu-bar",
+            "connected_to": "bar-1",
+            "wire_order": 2,
+            "yaw": 0,
+            "pitch": 0,
+            "roll": 0,
+            "reversed": false
+          },
+          {
+            "id": "bar-3",
+            "product_id": "shelly-nolu-bar",
+            "connected_to": "bar-2",
+            "wire_order": 3,
+            "yaw": 0,
+            "pitch": 0,
+            "roll": 0,
+            "reversed": false
+          },
+          {
+            "id": "bar-4",
+            "product_id": "shelly-nolu-bar",
+            "connected_to": "bar-3",
+            "wire_order": 4,
+            "yaw": 0,
+            "pitch": 0,
+            "roll": 0,
+            "reversed": false
+          },
+          {
+            "id": "bar-5",
+            "product_id": "shelly-nolu-bar",
+            "connected_to": "bar-4",
+            "wire_order": 5,
+            "yaw": 0,
+            "pitch": 0,
+            "roll": 0,
+            "reversed": false
+          },
+          {
+            "id": "bar-6",
+            "product_id": "shelly-nolu-bar",
+            "connected_to": "bar-5",
+            "wire_order": 6,
+            "yaw": 0,
+            "pitch": 0,
+            "roll": 0,
+            "reversed": false
+          },
+          {
+            "id": "bar-7",
+            "product_id": "shelly-nolu-bar",
+            "connected_to": "bar-6",
+            "wire_order": 7,
+            "yaw": 0,
+            "pitch": 0,
+            "roll": 0,
+            "reversed": false
+          },
+          {
+            "id": "bar-8",
+            "product_id": "shelly-nolu-bar",
+            "connected_to": "bar-7",
+            "wire_order": 8,
+            "yaw": 0,
+            "pitch": 0,
+            "roll": 0,
+            "reversed": false
+          },
+          {
+            "id": "bar-9",
+            "product_id": "shelly-nolu-bar",
+            "connected_to": "bar-8",
+            "wire_order": 9,
+            "yaw": 0,
+            "pitch": 0,
+            "roll": 0,
+            "reversed": false
+          }
+        ],
+        "animation": {
+          "mode": "aura",
+          "brightness_pct": 35,
+          "radius_mm": 1800,
+          "speed": 0.6,
+          "fade_seconds": 0.6,
+          "idle_pct": 0
+        },
+        "id": "lights-1",
+        "name": "Lights 1",
+        "enabled": true,
+        "product_id": "shelly-nolu-bar"
+      }
+    ]
   }
 }

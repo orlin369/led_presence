@@ -1,30 +1,25 @@
 # LED Presence
 
-A locally hosted Python Flask dashboard for multiple Shelly Presence Gen4 sensors. Displays real object tracks on one shared room plan, with separate presence, illumination, Wi-Fi and mounting readings for each sensor. All application distances, coordinates and geometry use **millimetres (mm)**. Angles use degrees. The backend connects to each device independently over local WebSocket RPC; the browser refreshes every second. No cloud service is required.
+A local Flask application that turns real Shelly Presence Gen4 readings into spatial light animations. Multiple sensors and multiple Shelly NOLU Bars controllers share one room. Each controller has its own location, connected bars, animation and output connection. Distances use **mm** and angles use **degrees**.
 
 ## Run locally
 
-Requires Python 3.12 or newer and network access to the sensors.
-
-To activate the existing virtual environment in PowerShell:
+Requires Python 3.12 or newer and network access to the devices.
 
 ```powershell
 Set-Location 'C:\Users\User\Documents\Git\orlin369\led_presence'
 .\.venv\Scripts\Activate.ps1
+python app.py
 ```
 
-Your prompt will show `(.venv)`. You can then run `python app.py`. Use `deactivate` to leave the environment.
-
-If PowerShell reports that running scripts is disabled, allow local scripts for the current PowerShell session, then activate again:
+If PowerShell blocks activation, allow local scripts for this window only:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
 .\.venv\Scripts\Activate.ps1
 ```
 
-This change expires when you close the PowerShell window and does not require administrator rights. You can also run the app without activation using `.\.venv\Scripts\python.exe app.py`.
-
-For first-time setup:
+First-time setup:
 
 ```powershell
 python -m venv .venv
@@ -32,96 +27,123 @@ python -m venv .venv
 .\.venv\Scripts\python.exe app.py
 ```
 
-Open **http://127.0.0.1:5000**. Stop with Ctrl+C. The starter uses Flask's development server on loopback, without debug mode, for local use. On macOS/Linux, use `.venv/bin/python`.
+Open **http://127.0.0.1:5000**. Stop with Ctrl+C; use `deactivate` to leave the environment. The app uses Flask's local development server on loopback without debug mode or the reloader. On macOS/Linux, use `.venv/bin/python`.
 
-## Installation settings
+## Pages and setup flow
 
-All installation-specific geometry, device addresses and physical parameters live in **`instance/config.json`**, excluded from Git. The first run copies `config.example.json`. Saving the installation form writes this file atomically without changing the devices' mounting or detection settings. Back up the file separately.
+1. **Devices** (`/devices`): add, name, enable, disable or remove sensors and light controllers. Set IP addresses, controller component IDs, DDP ports and product types here. Below the registry, select a controller for its live preview, animation settings and independent start/stop controls (`/devices#lights`). Device IDs stay stable when names or locations change.
+2. **Geometry** (`/geometry`): separate **Room**, **Sensors** and **Lights** tabs. Room sets dimensions and calibration notes. Sensors sets mounting for registered sensors and shows live readings. Lights selects a controller and sets its location, shared product measurements and bar connections. Direct links: `/geometry#room`, `/geometry#sensors`, `/geometry#lights`.
+3. **Dashboard** (`/`): the shared room plan, presence summary and object coordinates. All sensor and controller locations are shown; bar labels include the controller name. Viewpoint controls change only the drawing.
 
-**Edit `instance/config.json` for the current installation, not `config.example.json`.** The example is only used when creating a new instance and does not override an existing configuration. After editing the active JSON directly, stop the app with Ctrl+C and run `python app.py` again. The browser picks up the running app's updated configuration automatically when the form has no unsaved edits; reload the page to discard unsaved edits.
+There is no separate Lights navigation tab. Geometry's Lights tab is for physical placement and connections; Devices contains operating settings and controls. Old `/lights` and `/nolu` links redirect to `/devices#lights`. Unsaved light edits stay with their controller when switching selections.
 
-Existing configurations are automatically migrated to version 3. Version 1 distances are converted from metres to mm; version 2 flat placement fields are grouped under `mounting`, with tilt preserved as pitch and roll initialized to 0. The original is preserved as `instance/config.v1.backup.json` or `instance/config.v2.backup.json`. Loading version 3 does not convert values again.
+Saving device identity preserves existing geometry and animation. Saving sensor geometry preserves device names, addresses and enabled states. Saving one controller preserves the others. A change to a shared product affects every controller using it and stops/restores those controllers' active output first. A change to one controller stops only its output. Removing or disabling a device stops its reader while other devices continue independently.
 
-Room dimensions and placement are examples, not measured geometry. Measure them and check coordinate directions using known physical points before marking the installation calibrated. Millimetre units do not imply millimetre sensor accuracy.
+Room and Sensors tabs have independent saves and retain unsaved edits. Click-to-place works only on Sensors. Tabs support arrow keys, Home and End.
 
-| Parameter | Meaning |
+## Per-installation configuration
+
+The active configuration is **`instance/config.json`**, excluded from Git. Back it up separately. `config.example.json` supplies defaults only when creating a new instance. Editing the example does not override an existing installation. Stop the app before editing active JSON directly, then restart it. The browser picks up updated values when its form has no unsaved edits.
+
+Schema version **6** adds multiple controllers and a shared product catalogue. Existing configuration migrates automatically, preserving the room, sensors, original controller location, bar connections, product and animation. The old file is backed up as `instance/config.v<old-version>.backup.json`. Earlier migrations convert metres to mm and adopt sensor-facing reference walls without changing entered mounting distances.
+
+| Configuration | Meaning |
 | --- | --- |
-| `schema_version` | 3: millimetres, multiple sensors and nested mounting |
-| `installation_name`, `calibrated` | Installation label and verification status |
-| `room.width_mm`, `room.depth_mm`, `room.height_mm` | Rectangular room dimensions |
-| `sensors` | Up to 32 sensor configurations; an empty list is allowed |
-| `sensors[].id` | Stable, unique sensor identifier |
-| `sensors[].name` | Human-readable name |
-| `sensors[].device_host` | Unique IPv4 address; local authentication must currently be disabled |
-| `sensors[].enabled` | Whether the app connects to this sensor |
-| `sensors[].mounting.left_wall`, `sensors[].mounting.front_wall` | Distances in mm from the left and front reference walls |
-| `sensors[].mounting.yaw` | Orientation: 0 degrees faces into the room from the front reference wall; positive turns counterclockwise on the plan |
-| `sensors[].mounting.height` | Mounting height above floor in mm |
-| `sensors[].mounting.pitch`, `sensors[].mounting.roll` | Up/down tilt and rotation about the facing direction, in degrees; stored for future 3D geometry |
-| `physical.notes` | Installation and calibration notes |
+| `installation_name`, `calibrated`, `physical.notes` | Installation label and verification status/notes |
+| `room.width_mm`, `depth_mm`, `height_mm` | Shared room dimensions |
+| `sensors[]` | Sensor IDs, names, addresses, enabled states and mounting |
+| `lighting.products[]` | Shared bar definitions: ID, name, length, pixels per bar, verification |
+| `lighting.controllers[]` | Controller IDs, names, enabled states, product references, device settings, bars and animation |
+| `lighting.controllers[].controller` | IPv4 address, component ID, DDP port and mounting |
+| `lighting.controllers[].product_id` | Reference to a shared product |
+| `lighting.controllers[].bars[]` | Connected bar instances and electrical pixel order |
+| `lighting.controllers[].animation` | This controller's presence effect settings |
 
-Each sensor has a physical mounting object. Distances use mm and angles use degrees:
+Up to 32 sensors, 16 controllers and 16 product definitions are supported. Each controller supports up to 64 bars and 10000 mapped pixels. Controller address/component pairs must be unique; sensor IPs and IDs must be unique within their category. The current connector uses local Shelly Presence and LedStrip/DDP APIs with authentication disabled. Empty sensor/controller lists are allowed.
+
+## Mounting and room references
+
+Sensors and controllers use the same mounting structure:
 
 ```json
 "mounting": {
   "height": 700,
   "left_wall": 1700,
-  "front_wall": 0,
+  "front_wall": 390,
   "yaw": 0,
   "pitch": 0,
   "roll": 0
 }
 ```
 
-`front_wall` preserves the second horizontal room-position measurement. Zero in this example is a placeholder, not a confirmed wall offset. Yaw 0 faces into the room from the front reference wall; positive yaw turns counterclockwise on the top view. Pitch means up/down tilt; roll means rotation around the facing direction. **Only yaw is currently applied to the 2D map.** Height, pitch and roll remain reference parameters until the sensor's vertical coordinate convention is calibrated. The device's reported tilt is displayed separately and is not changed by saving these values.
+**FACING THE SELECTED SENSOR** is the default view. In the zero-yaw reference view, LEFT REFERENCE WALL is on the viewer's left, FRONT REFERENCE WALL near the sensor, RIGHT WALL on the right and BACK WALL behind the viewer. Origin is the FRONT/LEFT intersection. Room X increases towards RIGHT WALL and Y towards BACK WALL. Wall names stay attached to the same boundaries in every viewpoint.
 
-## Multiple sensors
+`left_wall` and `front_wall` measure from the named reference walls; height is above the floor. Yaw 0 points towards BACK WALL. Pitch is up/down tilt; roll rotates around the local forward axis. The radar transform currently applies horizontal placement and yaw only. Device mounting height/tilt are displayed separately and are not changed by saving app settings.
 
-Click **Add sensor**, enter its name, IP address, position and orientation, then **Save installation**. Select **Place on plan** for a sensor to set its distances from the reference walls by clicking the map. Changes preview immediately; save to apply them. Disable a sensor to stop its connection while retaining its configuration, or remove it from the installation.
-
-Each sensor has its own colour, status, WebSocket connection and reconnect loop. One offline sensor does not block the others. Editing geometry does not restart a working connection. Removing, disabling or changing a sensor's address stops its old reader. Sensor IDs remain stable when names or positions change.
-
-Track identifiers include the sensor ID, for example `sensor-1:7` and `sensor-2:7`. **Tracks are not fused across sensors**: the same person may appear more than once. The total is a detection count, not a unique-person count. The room is occupied when any online sensor reports occupancy; it is clear only when all enabled sensors are online and report clear. Otherwise coverage is unknown/partial.
-
-## Room-plan viewpoint
-
-Use the **Viewpoint** dropdown above the plan to look from the front, opposite, left or right wall. **Facing the selected sensor (my view)** shows the room looking toward the sensor selected with **Place on plan**, including its yaw. Your choice is remembered in this browser for this app address. Select another sensor to view it from the opposite direction.
-
-Viewpoint changes rotate only the drawing: sensor configuration, reference-wall names and coordinate-table values remain fixed. Labels stay readable, and clicking to place a sensor still saves the correct mounting distances in every view.
-
-## Geometry and device units
-
-The **front reference wall** is the bottom edge of the plan and the **left reference wall** is its left edge. These are fixed room references, independent of which way a person or sensor is facing. The mounting form uses distance from these walls and height above the floor. Internally, these distances map to X and Y. The room origin `(0, 0)` is at their bottom-left intersection; +X points right and +Y up. At yaw 0 degrees, reported +X/+Y align with the room axes. The device protocol sends metres; `geometry.py` converts readings to mm once before computing positions:
+Device +X points opposite to room +X. Device metres are converted to mm once:
 
 ```text
 reported_x_mm = device_x * 1000
 reported_y_mm = device_y * 1000
-room_x_mm = sensor_x_mm + reported_x_mm * cos(yaw) - reported_y_mm * sin(yaw)
-room_y_mm = sensor_y_mm + reported_x_mm * sin(yaw) + reported_y_mm * cos(yaw)
+room_x_mm = mounting.left_wall - reported_x_mm * cos(yaw) + reported_y_mm * sin(yaw)
+room_y_mm = mounting.front_wall + reported_x_mm * sin(yaw) + reported_y_mm * cos(yaw)
 ```
 
-The API and table also expose reported Z, minZ and maxZ converted to mm. No extra tilt or vertical transform is applied. Device mounting height is converted to mm for comparison with local reference measurements. Diagnostic data contains selected understood fields rather than publishing a mixture of native device distance units. Room height is saved for future geometry extensions and does not clip tracks. Outside-room tracks remain visible with dashed outlines.
+Reported Z/minZ/maxZ are converted to mm without another vertical/tilt correction. Verify reporting conventions using known points before extending to full 3D. Room height is stored for future extensions and does not clip tracks. Millimetre units do not imply millimetre sensor accuracy. Example dimensions and initial locations are illustrative; measure and verify the actual installation.
 
-Future polygon rooms, calibration or track fusion can extend `geometry.py` separately from device connections. The app enables temporary live tracking with `Presence.LiveTrack` and renews it every 25 seconds; it does not change other device settings. Lost connections and stale tracks are excluded from the live map. A `no_track` event stays valid while connected until a new track event arrives.
+## Unified NOLU product and connected bars
 
-Protocol reference: [Shelly Presence documentation](https://shelly-api-docs.shelly.cloud/gen2/ComponentsAndServices/Presence/).
+Define an identical bar type once in `lighting.products`. Length and pixel count apply to every controller referencing it. Zero pixels means unknown; software preview uses 12 samples per bar until a count is supplied. The starter 300 mm length is illustrative. Each new controller starts with a nine-bar chain.
+
+```json
+{
+  "id": "bar-2",
+  "product_id": "shelly-nolu-bar",
+  "connected_to": "bar-1",
+  "wire_order": 2,
+  "yaw": 0,
+  "pitch": 0,
+  "roll": 0,
+  "reversed": false
+}
+```
+
+The first bar connects to `controller`; other bars start at their parent's end. Joint angles are relative to the parent's orientation. Lengths and rotations propagate through the chain. The matrix order is yaw, pitch, roll in the local basis, followed by conversion to viewer-reference axes and the fixed **180-degree NOLU product-frame alignment**. This corrects calculated positions without adding offsets to saved fields or moving the controller anchor.
+
+A controller-rooted tree can represent branches geometrically; match supported physical wiring. Cycles, missing parents and duplicate IDs/orders are rejected. Reconnect children before removing a parent. `wire_order` is the actual electrical sequence within this controller, starting at 1. `reversed` flips pixels inside a bar without changing geometry. Different controllers may each have `bar-1`; aggregate identities include the controller ID.
+
+## Presence animation and physical output
+
+**Presence aura** blends soft glows around detected people; **Presence ripples** produces moving waves. Each controller has independent brightness, reach, speed, fade and idle glow. Influence uses horizontal room distance because radar Z is not calibrated floor height. The animation smooths between one-second sensor updates. Without fresh tracks and with zero idle glow, it fades to black.
+
+The backend renews `Presence.LiveTrack` every 25 seconds and receives real object events over WebSocket. Offline/stale tracks are excluded. Track IDs include the sensor ID. Tracks are not fused across sensors, so detection totals are not unique-person counts. A no-track event stays valid while connected until another track event.
+
+Controllers start in preview-only mode. Select one on **Devices ? light controls**, verify product measurements, then use **Start presence lighting**. The app checks that bar count multiplied by pixels per bar matches that controller's configured `num_leds`, and that its DDP port matches. The original controller reports **100 pixels**, which does not divide evenly into nine identical bars; confirm the actual count and correct the device configuration first. The app does not guess counts or change `num_leds`.
+
+Each enabled controller has an independent worker and UDP connection. Start/stop targets a controller ID; the API requires a selection when several exist. One offline controller does not stop another animation. Streaming targets 20 fps using RGB888 DDP, byte offsets and a final PUSH flag. Brightness is encoded in pixels, so controller brightness is temporarily 100. Protocol and colour order remain unchanged.
+
+**Stop & restore previous effect** restores only the selected controller's previous supported state and removes DDP if the app added it. Output continues with the browser closed. Normal shutdown attempts restoration; after abrupt termination, select another effect in the controller UI if needed. UDP confirms sending, not physical display. Physical DDP rendering still needs confirmation after real pixel mapping is configured.
+
+References: [Shelly Presence API](https://shelly-api-docs.shelly.cloud/gen2/ComponentsAndServices/Presence/), [LedFx DDP implementation](https://docs.ledfx.app/en/v2.1.6/devices/ddp.html).
 
 ## Separate app instances
 
-Point `LED_PRESENCE_INSTANCE` at a different directory to use another installation's `config.json`. Use a separate port for each simultaneous instance:
+Multiple controllers share this room. Separate installations can use another configuration directory and port:
 
 ```powershell
 $env:LED_PRESENCE_INSTANCE = 'C:\LED-Presence\room-b'
 .\.venv\Scripts\python.exe -m flask --app 'app:create_app()' run --host 127.0.0.1 --port 5001
 ```
 
-Do not enable Flask's reloader, which would create duplicate readers. Stop the app before editing JSON directly; restart afterward. The UI applies saved changes immediately.
+Do not enable the reloader, which duplicates device readers and animation workers.
 
 ## Checks
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
+
+Tests cover coordinate transforms, migration, registry validation, separate locations, shared products, independent output, simultaneous loopback UDP streams, stopping one while another continues, effect restoration, bar geometry and DDP framing.
 
 ## License
 
