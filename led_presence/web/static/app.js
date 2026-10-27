@@ -274,20 +274,15 @@ function render(state) {
   if (!config || JSON.stringify(config) !== JSON.stringify(state.config)) populate(state.config);
   renderAnimationProgram(state);
   const active=state.sensors.filter(s=>s.enabled), online=active.filter(s=>s.connected);
+  const fresh=online.filter(s=>!s.stale);
+  if($('online'))$('online').textContent=`${online.length} / ${active.length}`;
+  if($('freshness'))$('freshness').textContent=`${fresh.length} with fresh tracking data`;
   if($('connection')) {
     $('connection').textContent=`${online.length} / ${active.length} sensors connected`;
     $('connection').className=online.length===active.length && active.length?'':'error';
   }
   $('calibration').textContent=state.config.calibrated?'Geometry verified':'Uncalibrated geometry';
-  if($('count')) {
-  const fresh=online.filter(s=>!s.stale);
-  $('count').textContent=fresh.length?state.tracks.length:'—';
-  $('online').textContent=`${online.length} / ${active.length}`;
-  $('freshness').textContent=`${fresh.length} with fresh tracking data`;
-  const occupied=online.some(s=>s.zones.some(z=>z.occupied));
-  const complete=active.length && online.length===active.length && online.every(s=>s.zones.length && s.zones.every(z=>typeof z.occupied==='boolean'));
-  $('occupancy').textContent=occupied?'Occupied':complete?'Clear':'Unknown';
-  $('coverage').textContent=complete?'All enabled sensors reporting':'Partial sensor coverage';
+  if($('tracks')) {
   $('tracks').replaceChildren();
   for (const t of state.tracks) {
     const row=document.createElement('tr'), p=t.reported_mm;

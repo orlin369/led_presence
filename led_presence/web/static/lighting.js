@@ -3,6 +3,7 @@
   const hasBarEditors=!!el('bar-editors'),selector=el('light-controller');
   let collection,selectedId;const drafts=new Map();
   let saved, editing=false, frame, receivedAt=0, lastState, busy=false, outputMessage='';
+  const brightnessControls=new Map();
   const read=(o,path)=>path.split('.').reduce((value,key)=>value[key],o);
   const write=(o,path,value)=>{const keys=path.split('.'),key=keys.pop();keys.reduce((v,k)=>v[k],o)[key]=value;};
   const rgb=color=>`rgb(${color.join(',')})`;
@@ -154,10 +155,62 @@
   }
   async function loop(){await poll();setTimeout(loop,100);}loop();
   function renderControllerStatus(controllers) {
-    const container=el('controller-status');container.replaceChildren();
-    for(const group of controllers){const card=document.createElement('article'),heading=document.createElement('h3'),status=document.createElement('p');
-      heading.textContent=group.name;status.className='hint';status.textContent=!group.enabled?'Disabled':group.output_enabled?'Output active':group.controller_connected?'Online / preview only':'Offline / reconnecting';
-      card.append(heading,status);container.append(card);}
+    const container=el('controller-status');
+    for(const [id,control] of brightnessControls){
+      if(!controllers.some(group=>group.id===id)){
+        clearTimeout(control.timer);control.card.remove();brightnessControls.delete(id);
+      }
+    }
+    for(const group of controllers){
+      let control=brightnessControls.get(group.id);
+      if(!control){
+        const card=document.createElement('article'),heading=document.createElement('h3'),status=document.createElement('p');
+        status.className='hint';card.append(heading,status);
+        control={card,heading,status,pending:null,busy:false,dragging:false,error:'',timer:null};
+        if(!hasBarEditors){
+          const label=document.createElement('label'),caption=document.createElement('span'),value=document.createElement('output'),slider=document.createElement('input'),message=document.createElement('p');
+          label.className='device-brightness';slider.type='range';slider.min='0';slider.max='100';slider.step='1';slider.id=`brightness-${group.id}`;slider.dataset.controllerBrightness=group.id;
+          label.htmlFor=slider.id;value.htmlFor=slider.id;caption.append('Brightness ',value);label.append(caption,slider);message.className='hint';message.setAttribute('role','status');card.append(label,message);
+          Object.assign(control,{slider,value,message});
+          slider.addEventListener('pointerdown',()=>{control.dragging=true;});
+          for(const event of ['pointerup','pointercancel','lostpointercapture','blur'])slider.addEventListener(event,()=>{
+            control.dragging=false;clearTimeout(control.timer);saveDeviceBrightness(group.id);
+          });
+          slider.addEventListener('input',()=>{
+            control.pending=Number(slider.value);value.value=`${slider.value}%`;slider.setAttribute('aria-valuetext',value.value);
+            clearTimeout(control.timer);control.timer=setTimeout(()=>saveDeviceBrightness(group.id),120);
+          });
+          slider.addEventListener('change',()=>{clearTimeout(control.timer);saveDeviceBrightness(group.id);});
+        }
+        brightnessControls.set(group.id,control);container.append(card);
+      }
+      control.heading.textContent=group.name;control.status.textContent=!group.enabled?'Disabled':group.output_enabled?'Output active':group.controller_connected?'Online':'Offline / reconnecting';
+      if(control.slider){
+        control.slider.setAttribute('aria-label',`${group.name} brightness`);
+        const disabled=!group.enabled||!group.controller_connected;
+        if(control.slider.disabled!==disabled)control.slider.disabled=disabled;
+        if(!control.dragging&&!control.busy&&control.pending===null){
+          const value=String(group.brightness_pct??25);
+          if(control.slider.value!==value)control.slider.value=value;
+          control.value.value=`${control.slider.value}%`;control.slider.setAttribute('aria-valuetext',control.value.value);
+        }
+        control.message.textContent=control.error;
+      }
+    }
+  }
+  async function saveDeviceBrightness(id){
+    const control=brightnessControls.get(id);if(!control||control.busy||control.pending===null)return;
+    const value=control.pending;control.pending=null;control.busy=true;control.error='';
+    try{
+      const response=await fetch('/api/lighting/brightness',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({controller_id:id,brightness_pct:value})});
+      const result=await response.json();if(!response.ok)throw new Error(result.error);
+      const group=lastState?.lighting.controllers.find(g=>g.id===id);if(group)group.brightness_pct=result.brightness_pct;
+    }catch(error){control.error=error.message;}
+    finally{
+      control.busy=false;
+      if(brightnessControls.get(id)!==control)return;
+      if(control.pending!==null)saveDeviceBrightness(id);else await poll();
+    }
   }
   window.LightingUI={update(state){
     lastState=state;collection=state.config.lighting;

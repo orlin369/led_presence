@@ -34,6 +34,7 @@ class LightingService:
             "output_enabled": False,
             "controller_connected": False,
             "controller_on": None,
+            "controller_brightness_pct": None,
             "controller_pixels": None,
             "error": None,
             "frames_sent": 0,
@@ -166,12 +167,19 @@ class LightingService:
                         effect="ddp",
                     )
                     self.added_ddp = True
+                master_brightness = (
+                    program["brightness_pct"]
+                    if program
+                    else self.state["controller_brightness_pct"]
+                    if self.state["controller_brightness_pct"] is not None
+                    else self.previous.get("brightness", 100)
+                )
                 self.rpc(
                     controller,
                     "LedStrip.Set",
                     id=controller["component_id"],
                     on=True,
-                    brightness=100,
+                    brightness=master_brightness,
                     effect="ddp",
                 )
                 self.smoothed = []
@@ -183,6 +191,7 @@ class LightingService:
                     error=None,
                     controller_connected=True,
                     controller_pixels=actual["num_leds"],
+                    controller_brightness_pct=master_brightness,
                 )
                 self.state.update(
                     program_running=program is not None,
@@ -293,11 +302,8 @@ class LightingService:
                             "presence_animation.render returned an invalid "
                             "RGB pixel"
                         )
-                brightness = self.program["brightness_pct"] / 100
-                target = [
-                    [round(channel * brightness) for channel in pixel]
-                    for pixel in target
-                ]
+                # The physical dimmer and dashboard share the hardware master
+                # level. Sending full-range DDP avoids applying it twice.
                 for bar in layout["bars"]:
                     bar["pixels"] = [None] * (
                         config["product"]["pixels_per_bar"] or 12
@@ -317,11 +323,14 @@ class LightingService:
                     )
             offset = 0
             logical_count = sum(len(bar["pixels"]) for bar in layout["bars"])
+            preview_brightness = (
+                self.program["brightness_pct"] / 100 if self.program else 1
+            )
             for bar in layout["bars"]:
                 count = len(bar["pixels"])
                 bar["pixels"] = [
                     [
-                        round(c)
+                        round(c * preview_brightness)
                         for c in self.smoothed[
                             min(
                                 len(self.smoothed) - 1,
@@ -360,12 +369,27 @@ class LightingService:
                 or 12,
             }
 
+    def apply_controller_brightness(self, brightness_pct, controller):
+        """Apply one lamp's master level without changing power or effect."""
+        with self.lock:
+            self.rpc(
+                controller,
+                "LedStrip.Set",
+                id=controller["component_id"],
+                brightness=brightness_pct,
+            )
+            if self.program is not None:
+                self.program["brightness_pct"] = brightness_pct
+            self.state["controller_brightness_pct"] = brightness_pct
+            self.generation += 1
+
     def poll_power(self, controller):
-        """Read the lamp's own on/off state; its button can change it.
+        """Read lamp power and brightness, including physical button changes.
 
         Returns the delay before the next poll, backing off while offline so
         failed requests do not hold the lock every second.
         """
+        changed = None
         with self.lock:
             try:
                 status = self.rpc(
@@ -375,12 +399,31 @@ class LightingService:
                 )
             except (requests.RequestException, ValueError):
                 self.state["controller_on"] = None
+                self.state["controller_brightness_pct"] = None
                 return 5
             power = status.get("on") if isinstance(status, dict) else None
             self.state["controller_on"] = (
                 power if isinstance(power, bool) else None
             )
-            return 1
+            brightness = (
+                status.get("brightness") if isinstance(status, dict) else None
+            )
+            valid = (
+                not isinstance(brightness, bool)
+                and isinstance(brightness, (int, float))
+                and math.isfinite(brightness)
+                and 0 <= brightness <= 100
+            )
+            self.state["controller_brightness_pct"] = (
+                brightness if valid else None
+            )
+            if valid:
+                changed = (brightness, self.generation)
+        # Never call the manager while holding a service lock: requests take
+        # the manager lock first, then each service lock in turn.
+        if changed is not None:
+            self.installation.sync_controller_brightness(*changed)
+        return 1
 
     def run(self):
         poll_at = 0

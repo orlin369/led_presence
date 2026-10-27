@@ -317,6 +317,186 @@ class ProgramTests(unittest.TestCase):
         self.assertEqual(service.program["animation_id"], "ripples")
         self.assertEqual(service.rpc.call_count, before)
 
+    def test_brightness_is_live_and_does_not_reset_effect_or_restore_state(
+        self,
+    ):
+        response = self.client.post(
+            "/api/lighting/brightness",
+            json={"controller_id": "lights-1", "brightness_pct": 75},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["brightness_pct"], 75)
+        self.assertFalse(self.installation.lighting.program_state()["running"])
+        self.assertEqual(self.start().status_code, 200)
+        service = self.installation.lighting.services["lights-1"]
+        service.program["state"] = {"trail_marker": True}
+        started_at = service.program["started_at"]
+        before = service.rpc.call_count
+        self.client.post(
+            "/api/lighting/brightness",
+            json={"controller_id": "lights-1", "brightness_pct": 100},
+        )
+        self.assertEqual(service.program["brightness_pct"], 100)
+        self.assertEqual(service.program["state"], {"trail_marker": True})
+        self.assertEqual(service.program["started_at"], started_at)
+        self.assertEqual(service.rpc.call_count, before + 1)
+        self.assertEqual(service.rpc.call_args.args[1], "LedStrip.Set")
+        self.assertEqual(
+            service.rpc.call_args.kwargs, {"id": 0, "brightness": 100}
+        )
+        self.client.post(
+            "/api/animation", json={"enabled": True, "animation_id": "ripples"}
+        )
+        self.assertEqual(service.program["brightness_pct"], 100)
+        self.client.post("/api/animation", json={"enabled": False})
+        self.assertEqual(self.restores[-1][1]["brightness"], 77)
+
+    def test_master_brightness_scales_preview_without_double_dimming(self):
+        self.assertEqual(self.start().status_code, 200)
+        service = self.installation.lighting.services["lights-1"]
+        with patch(
+            "led_presence.lights.lighting_service.presence_animation.render",
+            return_value=[(200, 100, 40)] * 100,
+        ):
+            for percent, expected in (
+                (25, [50, 25, 10]),
+                (100, [200, 100, 40]),
+                (0, [0, 0, 0]),
+            ):
+                self.client.post(
+                    "/api/lighting/brightness",
+                    json={
+                        "controller_id": "lights-1",
+                        "brightness_pct": percent,
+                    },
+                )
+                service.previous_time -= 20
+                frame = self.installation.snapshot()["lighting"][
+                    "controllers"
+                ][0]
+                self.assertEqual(frame["output_pixels"][0], [200, 100, 40])
+                self.assertEqual(frame["bars"][0]["pixels"][0], expected)
+                self.assertEqual(frame["controller_brightness_pct"], percent)
+                self.assertEqual(
+                    service.rpc.call_args.kwargs,
+                    {"id": 0, "brightness": percent},
+                )
+
+    def test_physical_dimming_updates_one_lamp_without_echo_or_restart(
+        self,
+    ):
+        self.assertEqual(self.start().status_code, 200)
+        service = self.installation.lighting.services["lights-1"]
+        service.program["state"] = {"trail_marker": True}
+        started_at = service.program["started_at"]
+        service.rpc.side_effect = None
+        service.rpc.return_value = {
+            "on": False,
+            "brightness": 40,
+            "effect": "ddp",
+        }
+        service.rpc.reset_mock()
+        service.poll_power(service.active_controller)
+        state = self.installation.lighting.program_state()
+        self.assertEqual(state["brightness_by_controller"]["lights-1"], 40)
+        self.assertTrue(state["running"])
+        self.assertEqual(service.program["state"], {"trail_marker": True})
+        self.assertEqual(service.program["started_at"], started_at)
+        self.assertFalse(service.state["controller_on"])
+        self.assertEqual(service.rpc.call_count, 1)
+        self.assertEqual(service.rpc.call_args.args[1], "LedStrip.GetStatus")
+        generation = service.generation
+        service.poll_power(service.active_controller)
+        self.assertEqual(service.generation, generation)
+        for invalid in (None, True, -1, 101, "40", float("nan")):
+            service.rpc.return_value = {"on": True, "brightness": invalid}
+            service.poll_power(service.active_controller)
+            self.assertEqual(
+                self.installation.lighting.brightness_by_controller[
+                    "lights-1"
+                ],
+                40,
+            )
+
+    def test_each_device_has_independent_dimming_and_ignores_stale_events(
+        self,
+    ):
+        second = copy.deepcopy(self.config["lighting"]["controllers"][0])
+        second.update(id="lights-2", name="Second controller")
+        second["controller"]["device_host"] = "192.0.2.2"
+        self.config["lighting"]["controllers"].append(second)
+        self.installation.save(self.config)
+        self.mock_services()
+        self.assertEqual(self.start().status_code, 200)
+        first = self.installation.lighting.services["lights-1"]
+        other = self.installation.lighting.services["lights-2"]
+        calls = other.rpc.call_count
+        first.rpc.side_effect = None
+        first.rpc.return_value = {"on": True, "brightness": 55}
+        first.poll_power(first.active_controller)
+        self.assertEqual(first.program["brightness_pct"], 55)
+        self.assertEqual(other.program["brightness_pct"], 25)
+        self.assertEqual(other.rpc.call_count, calls)
+        response = self.client.post(
+            "/api/lighting/brightness",
+            json={"controller_id": "lights-2", "brightness_pct": 80},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(other.program["brightness_pct"], 80)
+        self.assertEqual(first.program["brightness_pct"], 55)
+        old_generation = first.generation
+        self.installation.lighting.set_controller_brightness("lights-1", 70)
+        self.installation.lighting.observe_controller_brightness(
+            "lights-1", 15, old_generation
+        )
+        levels = self.installation.lighting.brightness_by_controller
+        self.assertEqual(levels, {"lights-1": 70, "lights-2": 80})
+        other.rpc.side_effect = ValueError("offline")
+        first.rpc.return_value = {"on": True, "brightness": 45}
+        first.poll_power(first.active_controller)
+        self.assertEqual(first.program["brightness_pct"], 45)
+        self.assertTrue(first.state["program_running"])
+        self.assertIsNone(self.installation.lighting.program_state()["error"])
+        # Device sliders also work with the dashboard program stopped.
+        self.client.post("/api/animation", json={"enabled": False})
+        first.rpc.reset_mock()
+        self.installation.lighting.set_controller_brightness("lights-1", 30)
+        self.assertEqual(
+            first.rpc.call_args.kwargs, {"id": 0, "brightness": 30}
+        )
+        self.assertFalse(first.state["output_enabled"])
+
+    def test_invalid_brightness_is_rejected_without_changes(self):
+        for controller_id in (None, "missing", [], True):
+            response = self.client.post(
+                "/api/lighting/brightness",
+                json={"controller_id": controller_id, "brightness_pct": 50},
+            )
+            self.assertEqual(response.status_code, 400)
+        for value in (-1, 101, True, "50", None, [], float("nan")):
+            response = self.client.post(
+                "/api/lighting/brightness",
+                json={"controller_id": "lights-1", "brightness_pct": value},
+            )
+            self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            self.installation.lighting.brightness_by_controller["lights-1"], 25
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/lighting/brightness", data="50"
+            ).status_code,
+            415,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/lighting/brightness",
+                json={"controller_id": "lights-1", "brightness_pct": 50},
+                headers={"Origin": "https://other.example"},
+            ).status_code,
+            403,
+        )
+
     def test_start_requires_enabled_online_source_and_explicit_json(self):
         self.installation.readers[self.sensor_id].state["connected"] = False
         self.assertEqual(self.start().status_code, 400)

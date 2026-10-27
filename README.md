@@ -155,9 +155,28 @@ A controller-rooted tree can represent branches geometrically; match supported p
 
 ## Presence animation and physical output
 
+The **Sensors Online** count and tracking freshness are shown in the **Sensors**
+block under **Geometry → Sensors**.
+
 ### Editable dashboard animation program
 
 The first sensor in the Devices list is always the reference for the sensor-facing view and dashboard animation. There is no reference-sensor dropdown. Choose an effect in the **Animation** dropdown, then use **Start animation** beside it. You can change effects while running; each controller clears its previous trail and blends into the new effect. The button becomes **Stop animation**. Fresh tracks from the first sensor drive every enabled light controller. If it is disabled or offline, the app does not substitute another sensor. Changing the first sensor stops an active program; restart to use the new reference. The program runs on the server, so changing pages or closing the browser does not stop it; reloading the dashboard shows its current effect and state. App startup leaves it stopped.
+
+Each light controller has its own **Brightness** slider on **Devices**, in
+its status card under the light controls. It adjusts that device's hardware
+master brightness from **0% to 100%**, whether an animation is running or
+stopped. The slider changes neither power nor effect: dimming an off lamp
+does not turn it on. Each physical NOLU dimmer updates only its own slider,
+usually within 1-2 seconds. Other controllers keep their brightness levels.
+While dragging, live status updates leave the thumb under your control;
+releasing the slider sends the final selected level.
+The dashboard contains the effect selector and Start/Stop controls only.
+
+Levels are read from the controllers and used independently by the dashboard
+program. Changing brightness does not clear trails or restart an effect.
+DDP pixels retain their full colour range and each controller applies its
+master level once. Stop restores the pre-animation brightness and effect;
+that restored brightness is then reflected by the device's slider.
 
 Available effects:
 
@@ -178,7 +197,7 @@ python main.py
 
 The file is imported once at startup. There is no hot reload or browser code editor. Its `render(context)` function receives elapsed time, the configured LED count, the selected sensor, fresh room-coordinate tracks, room dimensions and controller settings. Return exactly `pixel_count` RGB triples, with integer channels from 0 to 255. Keep the function fast and non-blocking; the app handles transport, smoothing and restoration.
 
-The initial program, **Presence ribbons**, projects each person onto the nearest section of the lights using room coordinates and the saved bar geometry. A bright core follows movement, surrounded by a halo and fading trail in the person's colour. Distance from the sensor changes the halo width. Multiple people create separate pools of light, and an empty/offline source fades to black. Effects return full-range colour; brightness (default 25%) is applied when frames are sent. Constants near the top of the file control halo width and trail duration.
+The initial program, **Presence ribbons**, projects each person onto the nearest section of the lights using room coordinates and the saved bar geometry. A bright core follows movement, surrounded by a halo and fading trail in the person's colour. Distance from the sensor changes the halo width. Multiple people create separate pools of light, and an empty/offline source fades to black. Effects return full-range colour; hardware master brightness defaults to 25%. Constants near the top of the file control halo width and trail duration.
 
 The program reads the actual configured LED count (27 on the original controller: nine bars with three addressable LEDs each). Until pixels per bar are verified, it estimates LED positions at equal density along the bars in electrical order; the preview labels this approximation. It honours each bar's reversed wiring and the controller's saved location and orientation. Accurate positioning requires verified bar dimensions and pixel counts matching the controller. `render(context)` also receives `pixel_positions` in mm and a persistent per-controller `state` dictionary, reset on Start. Spatial effects below retain their stricter pixel-mapping checks.
 
@@ -192,7 +211,7 @@ Each live track gets a unique colour from a fixed LED-friendly palette (`led_pre
 
 Controllers start in preview-only mode. For **spatial per-bar effects**, select one on **Devices → light controls**, verify product measurements, then use **Start presence lighting**. Bar count multiplied by pixels per bar must match that controller's `num_leds`, and the DDP port must match. Each Shelly NOLU Bar has **3 addressable LEDs**, verified with DDP test frames. The original nine-bar controller therefore uses `num_leds` 27. If the device reports more LEDs than physically exist, light aimed at the missing addresses is invisible and the lamp appears dark or unresponsive. The dashboard program uses the reported count directly with estimated positions until mapping is verified. Neither path changes `num_leds`.
 
-Each enabled controller has an independent worker and UDP connection. Start/stop targets a controller ID; the API requires a selection when several exist. One offline controller does not stop another animation. Streaming targets 20 fps using RGB888 DDP, byte offsets and a final PUSH flag. Brightness is encoded in pixels, so controller brightness is temporarily 100. Protocol and colour order remain unchanged.
+Each enabled controller has an independent worker and UDP connection. Start/stop targets a controller ID; the API requires a selection when several exist. One offline controller does not stop another animation. Streaming targets 20 fps using RGB888 DDP, byte offsets and a final PUSH flag. The dashboard program uses hardware master brightness, synchronized with physical dimming. Independent Devices effects encode brightness in pixels and temporarily set the controller to 100%. Protocol and colour order remain unchanged.
 
 **Stop & restore previous effect** restores only the selected controller's previous supported state and removes DDP if the app added it. Output continues with the browser closed. Normal shutdown attempts restoration; after abrupt termination, select another effect in the controller UI if needed. UDP confirms sending, not physical display. Physical DDP rendering still needs confirmation after real pixel mapping is configured.
 

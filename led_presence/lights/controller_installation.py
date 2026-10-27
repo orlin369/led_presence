@@ -22,3 +22,11 @@ class ControllerInstallation:
             "config": {"lighting": controller_config(lighting, group)},
             "tracks": state["tracks"],
         }
+
+    def sync_controller_brightness(self, brightness_pct, generation):
+        """Forward an observed hardware dimmer change to the coordinator."""
+        manager = getattr(self.installation, "lighting", None)
+        if manager is not None:
+            manager.observe_controller_brightness(
+                self.controller_id, brightness_pct, generation
+            )

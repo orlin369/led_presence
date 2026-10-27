@@ -104,8 +104,8 @@ def animation_program():
     return jsonify(installation.lighting.program_state())
 
 
-def animation_brightness():
-    """Change program brightness independently of its running state."""
+def controller_brightness():
+    """Change one controller's brightness without changing its power state."""
     if request.headers.get("Origin") and request.headers[
         "Origin"
     ] != request.host_url.rstrip("/"):
@@ -117,12 +117,17 @@ def animation_brightness():
         return jsonify(error="Provide brightness_pct from 0 to 100"), 400
     installation = current_app.extensions["installation"]
     try:
-        installation.lighting.set_program_brightness(
-            data.get("brightness_pct")
+        installation.lighting.set_controller_brightness(
+            data.get("controller_id"), data.get("brightness_pct")
         )
     except ValueError as exc:
         return jsonify(error=str(exc)), 400
-    return jsonify(installation.lighting.program_state())
+    return jsonify(
+        controller_id=data["controller_id"],
+        brightness_pct=installation.lighting.brightness_by_controller[
+            data["controller_id"]
+        ],
+    )
 
 
 def config():
@@ -172,8 +177,8 @@ def create_app(instance_path=None, start_worker=True):
     )
     app.add_url_rule("/api/config", view_func=config, methods=["GET", "PUT"])
     app.add_url_rule(
-        "/api/animation/brightness",
-        view_func=animation_brightness,
+        "/api/lighting/brightness",
+        view_func=controller_brightness,
         methods=["POST"],
     )
     return app

@@ -7,6 +7,8 @@ import math
 import threading
 import time
 
+import requests
+
 from led_presence.animations import presence_animation
 from led_presence.lights.controller_config import controller_config
 from led_presence.lights.controller_installation import ControllerInstallation
@@ -22,9 +24,10 @@ class LightControllers:
         self.start_workers = start_workers
         self.lock = threading.RLock()
         self.services = {}
+        self.controller_settings = {}
         self.program_sensor_id = None
         self.program_animation_id = presence_animation.DEFAULT_ANIMATION
-        self.program_brightness_pct = presence_animation.DEFAULT_BRIGHTNESS_PCT
+        self.brightness_by_controller = {}
         self.program_ids = []
         self.program_started_at = None
         self.program_error = None
@@ -46,8 +49,22 @@ class LightControllers:
 
     def reconcile(self, config):
         with self.lock:
+            ids = {group["id"] for group in config["controllers"]}
+            self.brightness_by_controller = {
+                key: value
+                for key, value in self.brightness_by_controller.items()
+                if key in ids
+            }
+            for key in ids:
+                self.brightness_by_controller.setdefault(
+                    key, presence_animation.DEFAULT_BRIGHTNESS_PCT
+                )
             active = {
                 g["id"]: g for g in config["controllers"] if g["enabled"]
+            }
+            self.controller_settings = {
+                key: copy.deepcopy(group["controller"])
+                for key, group in active.items()
             }
             for key in list(self.services):
                 if key not in active:
@@ -87,6 +104,7 @@ class LightControllers:
                     id=group["id"],
                     name=group["name"],
                     enabled=group["enabled"],
+                    brightness_pct=self.brightness_by_controller[group["id"]],
                 )
                 groups.append(frame)
                 for bar in frame["bars"]:
@@ -130,7 +148,9 @@ class LightControllers:
                 "running": bool(active),
                 "sensor_id": self.program_sensor_id,
                 "animation_id": self.program_animation_id,
-                "brightness_pct": self.program_brightness_pct,
+                "brightness_by_controller": dict(
+                    self.brightness_by_controller
+                ),
                 "animations": [
                     {"id": key, **value}
                     for key, value in presence_animation.ANIMATIONS.items()
@@ -141,8 +161,8 @@ class LightControllers:
                 or ("; ".join(errors) if errors else None),
             }
 
-    def set_program_brightness(self, brightness_pct):
-        """Set program brightness without starting or resetting effects."""
+    def set_controller_brightness(self, controller_id, brightness_pct):
+        """Set one lamp's master level, preserving its power and effect."""
         if (
             isinstance(brightness_pct, bool)
             or not isinstance(brightness_pct, (int, float))
@@ -151,14 +171,37 @@ class LightControllers:
         ):
             raise ValueError("Brightness must be a number from 0 to 100")
         with self.lock:
-            self.program_brightness_pct = brightness_pct
-            for key in self.program_ids:
-                service = self.services.get(key)
-                if service:
-                    with service.lock:
-                        if service.program is not None:
-                            service.program["brightness_pct"] = brightness_pct
-                            service.generation += 1
+            if (
+                not isinstance(controller_id, str)
+                or controller_id not in self.services
+            ):
+                raise ValueError("Select an enabled light controller")
+            service = self.services[controller_id]
+            controller = self.controller_settings[controller_id]
+            try:
+                service.apply_controller_brightness(brightness_pct, controller)
+            except (requests.RequestException, ValueError) as exc:
+                raise ValueError(
+                    f"{controller_id}: brightness update failed: {exc}"
+                ) from exc
+            self.brightness_by_controller[controller_id] = brightness_pct
+
+    def observe_controller_brightness(
+        self, controller_id, brightness_pct, generation
+    ):
+        """Adopt physical dimming unless a newer command superseded it."""
+        with self.lock:
+            service = self.services.get(controller_id)
+            if service is None:
+                return
+            with service.lock:
+                if service.generation != generation:
+                    return
+                self.brightness_by_controller[controller_id] = brightness_pct
+                if service.program is not None:
+                    if service.program["brightness_pct"] != brightness_pct:
+                        service.program["brightness_pct"] = brightness_pct
+                        service.generation += 1
 
     def start_program(self, config, animation_id=None):
         animation_id = (
@@ -227,7 +270,6 @@ class LightControllers:
                 "room": copy.deepcopy(config["room"]),
                 "started_at": self.program_started_at,
                 "animation_id": animation_id,
-                "brightness_pct": self.program_brightness_pct,
             }
             try:
                 for group in groups:
@@ -235,7 +277,12 @@ class LightControllers:
                     self.services[group["id"]].set_output(
                         True,
                         controller_config(config["lighting"], group),
-                        program=context,
+                        program={
+                            **context,
+                            "brightness_pct": self.brightness_by_controller[
+                                group["id"]
+                            ],
+                        },
                     )
             except Exception as exc:
                 message = str(exc)
