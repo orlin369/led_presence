@@ -1,0 +1,29 @@
+{
+  "schema_version": 3,
+  "installation_name": "LED Presence \u00b7 Local room",
+  "calibrated": false,
+  "room": {
+    "width_mm": 3600,
+    "depth_mm": 3600,
+    "height_mm": 2500
+  },
+  "sensors": [
+    {
+      "id": "sensor-1",
+      "name": "Presence 1",
+      "device_host": "192.168.88.184",
+      "enabled": true,
+      "mounting": {
+        "height": 700,
+        "left_wall": 1700,
+        "front_wall": 390,
+        "yaw": 0,
+        "pitch": 0,
+        "roll": 0
+      }
+    }
+  ],
+  "physical": {
+    "notes": "Measure the room and sensor placement before marking calibrated."
+  }
+}
