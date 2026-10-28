@@ -1,0 +1,16 @@
+<section class="panel">
+  <div class="panel-heading"><div><span class="eyebrow">{% if editor_page %}DRAFT GEOMETRY{% else %}LIVE SPATIAL VIEW{% endif %}</span><h2>Room in 3D</h2></div><span id="scene-status" class="tag" role="status">Connecting…</span></div>
+  <div class="scene-tools">
+    <label>Camera<select id="scene-camera"><option value="orbit">Perspective</option><option value="top">Top</option><option value="front">Front reference wall</option><option value="side">Left reference wall</option></select></label>
+    <button type="button" class="secondary" id="scene-reset">Reset view</button>
+    <button type="button" class="secondary" id="scene-in">Zoom in</button>
+    <button type="button" class="secondary" id="scene-out">Zoom out</button>
+    <label class="checkbox"><input type="checkbox" id="scene-labels" checked> Labels</label>
+  </div>
+  <canvas {% if editor_page %}data-draft="true"{% endif %} id="scene" tabindex="0" aria-label="Interactive 3D room with sensors, light bars and live tracks. Arrow keys rotate, plus and minus zoom, Shift and arrows pan, Home resets.">Your browser needs canvas support to display the 3D room.</canvas>
+  <p class="hint">Drag to orbit · Shift-drag or right-drag to pan · Scroll to zoom · Touch: drag to orbit. Keyboard: arrows orbit, Shift + arrows pan, + / − zoom, Home resets.</p>
+  {% if editor_page %}<div class="legend"><span>● Sensor mounting and facing direction</span><span>● Controller mounting</span><span>━ Connected bars · draft geometry</span></div>{% else %}<div class="legend"><span>● Sensors and facing direction</span><span>● Controllers: green on / red off / grey unknown</span><span>━ Light bars with live preview colours</span><span>● People: same colours as Dashboard</span></div>{% endif %}
+  <p id="scene-summary" class="hint"></p>
+  <p class="hint">People are projected onto the floor: reported radar Z is not calibrated room height. Sensor arrows show horizontal yaw; pitch and roll do not transform tracks. Light bars use the full saved 3D geometry. Colours show a software preview; draft geometry never changes hardware. <a href="{{ url_for('geometry') }}">Edit geometry</a></p>
+</section>
+<section class="panel data"><h2>Installation objects</h2><div class="table-wrap"><table><thead><tr><th>Object</th><th>State</th><th>Room X / Y / Z · mm</th></tr></thead><tbody id="scene-objects"></tbody></table></div></section>

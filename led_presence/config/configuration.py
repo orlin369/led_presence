@@ -7,6 +7,7 @@ import ipaddress
 import math
 import re
 
+from led_presence.core.room_geometry import validate_outline
 from led_presence.lights.controller_config import (
     validate_controllers,
     wrap_single_lighting,
@@ -93,6 +94,7 @@ def validate_config(config):
 
     for key in ("width_mm", "depth_mm", "height_mm"):
         validate_number(config["room"], key, positive=True)
+    validate_outline(config["room"])
     if not isinstance(config["sensors"], list) or len(config["sensors"]) > 32:
         raise ValueError("sensors must be a list of up to 32 sensors")
     ids, hosts = set(), set()

@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="page-intro"><span class="eyebrow">INSTALLATION SETUP</span><h2>Geometry</h2><p class="hint">Room dimensions, sensor mounting and light placement. Saved settings are shared with the live dashboard.</p></div>
+<p><a class="editor-link" href="{{ url_for('geometry_editor') }}">Open visual editor →</a> <span class="hint">Draw an irregular room and drag devices into position.</span></p>
 <div class="geometry-tabs" role="tablist" aria-label="Geometry settings">
   <button type="button" role="tab" id="geometry-tab-room" aria-controls="geometry-panel-room" aria-selected="true">Room</button>
   <button type="button" role="tab" id="geometry-tab-sensors" aria-controls="geometry-panel-sensors" aria-selected="false" tabindex="-1">Sensors</button>

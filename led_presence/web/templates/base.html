@@ -2,20 +2,21 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>{% if three_d_page %}3D · {% elif geometry_page %}Geometry · {% elif devices_page %}Devices · {% endif %}LED Presence</title>
+  <title>{% if editor_page %}Visual editor · {% elif three_d_page %}3D · {% elif geometry_page %}Geometry · {% elif devices_page %}Devices · {% endif %}LED Presence</title>
   <link rel="preload" href="{{ url_for('static', filename='fonts/Roboto-Regular.ttf') }}" as="font" type="font/ttf" crossorigin>
   <link rel="icon" href="data:,"><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-  <script defer src="{{ url_for('static', filename='three-d.js' if three_d_page else 'devices.js' if devices_page else 'app.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='three-d.js' if three_d_page or editor_page else 'devices.js' if devices_page else 'app.js') }}"></script>
+  {% if editor_page %}<script type="module" src="{{ url_for('static', filename='geometry-editor.js') }}"></script>{% endif %}
   {% if devices_page or geometry_page %}<script defer src="{{ url_for('static', filename='lighting.js') }}"></script>{% endif %}
 </head>
 <body class="{% if three_d_page %}three-d-page{% elif geometry_page %}geometry-page{% elif devices_page %}devices-page{% else %}dashboard-page{% endif %}">
 <header>
   <div><h1>LED Presence<span class="dot">.</span></h1></div>
   <div class="header-tools"><nav aria-label="Main navigation">
-    <a href="{{ url_for('index') }}" {% if not geometry_page and not devices_page and not three_d_page %}aria-current="page"{% endif %}>Dashboard</a>
+    <a href="{{ url_for('index') }}" {% if not geometry_page and not devices_page and not three_d_page and not editor_page %}aria-current="page"{% endif %}>Dashboard</a>
     <a href="{{ url_for('three_d') }}" {% if three_d_page %}aria-current="page"{% endif %}>3D</a>
     <a href="{{ url_for('devices') }}" {% if devices_page %}aria-current="page"{% endif %}>Devices</a>
-    <a href="{{ url_for('geometry') }}" {% if geometry_page %}aria-current="page"{% endif %}>Geometry</a>
+    <a href="{{ url_for('geometry') }}" {% if geometry_page or editor_page %}aria-current="page"{% endif %}>Geometry</a>
   </nav></div>
 </header>
 <main>{% block content %}{% endblock %}</main>

@@ -39,7 +39,7 @@ function objects(updateTable) {
   for (const [i, sensor] of c.sensors.entries()) {
     const point = mount(sensor.mounting), color = sensor.enabled ? palette[i % palette.length] : '#71818a';
     const current = live.find(s => s.id === sensor.id);
-    const description = !sensor.enabled ? 'Disabled' : !current?.connected ? 'Offline' : current.stale ? 'Stale' : 'Online';
+    const description = canvas.dataset.draft ? 'Draft position' : !sensor.enabled ? 'Disabled' : !current?.connected ? 'Offline' : current.stale ? 'Stale' : 'Online';
     marker(point, color, `${sensor.name} · ${description}`, 7);
     line([point[0], point[1], 0], point, '#2c405c');
     const angle = sensor.mounting.yaw * Math.PI / 180;
@@ -55,7 +55,7 @@ function objects(updateTable) {
   for (const controller of state.lighting.controllers) {
     const color = controller.controller_on === true ? '#4cd964' : controller.controller_on === false ? '#ff4d4d' : '#8a9aa2';
     marker(controller.controller, color, controller.name, 7);
-    if (updateTable) row(controller.name, !controller.enabled ? 'Disabled' : controller.controller_on === true ? 'On' : controller.controller_on === false ? 'Off' : 'Unknown / offline', controller.controller);
+    if (updateTable) row(controller.name, canvas.dataset.draft ? 'Draft position' : !controller.enabled ? 'Disabled' : controller.controller_on === true ? 'On' : controller.controller_on === false ? 'Off' : 'Unknown / offline', controller.controller);
     for (const bar of controller.bars) {
       line(bar.start, bar.end, '#577394', 7);
       const pixels = bar.pixels || [bar.color || [160, 190, 200]];
@@ -89,24 +89,31 @@ function draw(updateTable = false) {
   center = low.map((v, i) => (v + high[i]) / 2);
   radius = Math.max(1, Math.hypot(...high.map((v, i) => v - low[i])) / 2);
   ctx.clearRect(0, 0, width, height);
-  const floor = [[0, 0, 0], [w, 0, 0], [w, d, 0], [0, d, 0]];
+  const floor = (room.outline_mm || [[0,0],[w,0],[w,d],[0,d]]).map(([x,y]) => [x,y,0]);
   ctx.beginPath();
   floor.forEach((p, i) => { const q = project(p); if (i) ctx.lineTo(q[0], q[1]); else ctx.moveTo(q[0], q[1]); });
   ctx.closePath(); ctx.fillStyle = '#122a4f'; ctx.fill();
+  ctx.save(); ctx.clip();
   for (let i = 0; i <= 10; i++) {
     line([w * i / 10, 0, 0], [w * i / 10, d, 0], '#2c405c');
     line([0, d * i / 10, 0], [w, d * i / 10, 0], '#2c405c');
   }
-  for (let i = 0; i < 4; i++) {
-    const a = floor[i], b = floor[(i + 1) % 4];
+  // Draw the grid inside the polygon, then restore before walls and objects.
+  for (const item of primitives) {
+    const [a,b]=item.points.map(project);ctx.beginPath();ctx.strokeStyle=item.color;ctx.lineWidth=1;
+    ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();
+  }
+  primitives=[];ctx.restore();
+  for (let i = 0; i < floor.length; i++) {
+    const a = floor[i], b = floor[(i + 1) % floor.length];
     line(a, b, '#577394', 2);
     line(a, [a[0], a[1], h], '#577394');
     line([a[0], a[1], h], [b[0], b[1], h], '#577394');
   }
-  marker([w / 2, 0, 0], '#b3c2d5', `FRONT · ${w} mm`, 0);
-  marker([w / 2, d, 0], '#b3c2d5', 'BACK', 0);
-  marker([0, d / 2, 0], '#b3c2d5', `LEFT · ${d} mm`, 0);
-  marker([w, d / 2, 0], '#b3c2d5', 'RIGHT', 0);
+  marker([w / 2, 0, 0], '#b3c2d5', `FRONT REFERENCE · ${w} mm`, 0);
+  marker([w / 2, d, 0], '#b3c2d5', room.outline_mm ? 'Y MAX' : 'BACK', 0);
+  marker([0, d / 2, 0], '#b3c2d5', `LEFT REFERENCE · ${d} mm`, 0);
+  marker([w, d / 2, 0], '#b3c2d5', room.outline_mm ? 'X MAX' : 'RIGHT', 0);
   marker([0, 0, h], '#b3c2d5', `Height ${h} mm`, 0);
   if (updateTable) document.getElementById('scene-objects').replaceChildren();
   objects(updateTable);
@@ -189,4 +196,11 @@ async function poll() {
     status.textContent = `Connection lost · ${state ? 'showing last snapshot' : 'retrying'}`;
   } finally { window.setTimeout(poll, 1000); }
 }
-if (ctx) poll(); else status.textContent = 'Canvas is unavailable in this browser.';
+if (canvas.dataset.draft) {
+  window.addEventListener('geometry-preview', event => {
+    state = event.detail; status.textContent = 'Draft only · no hardware output';
+    document.getElementById('scene-summary').textContent = 'Geometry preview · no live output';
+    draw(true);
+  });
+} else if (ctx) poll();
+else status.textContent = 'Canvas is unavailable in this browser.';

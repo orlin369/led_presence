@@ -159,6 +159,11 @@ function draft() {
     const input=roomForm.elements.namedItem(name);
     writePath(c,name,input.type==='checkbox'?input.checked:input.type==='number'?Number(input.value):input.value);
   }
+  if(roomForm && c.room.outline_mm) {
+    c.room.outline_mm = config.room.outline_mm.map(([x,y]) => [
+      x*c.room.width_mm/config.room.width_mm,
+      y*c.room.depth_mm/config.room.depth_mm]);
+  }
   if(!form)return c;
   c.sensors = [...$('sensor-editors').children].map(editor => {
     const sensor = structuredClone(config.sensors.find(s => s.id === editor.dataset.id) || {id: editor.dataset.id});
@@ -186,7 +191,8 @@ function draw(state) {
   const c = dirty ? draft() : state.config, room = c.room;
   if (!(room.width_mm > 0 && room.depth_mm > 0)) return;
   const tracks = previewTracks(state, c);
-  const corners = [{x:0,y:0},{x:room.width_mm,y:0},{x:room.width_mm,y:room.depth_mm},{x:0,y:room.depth_mm}];
+  const corners = (room.outline_mm || [[0,0],[room.width_mm,0],
+    [room.width_mm,room.depth_mm],[0,room.depth_mm]]).map(([x,y])=>({x,y}));
   const lighting = state.lighting;
   const lightPoints = lighting ? [...lighting.controllers.map(c=>c.controller),...lighting.bars.flatMap(b=>[b.start,b.end])].map(p=>({x:p[0],y:p[1]})) : [];
   const points = [...corners, ...c.sensors.map(s=>({x:s.mounting.left_wall,y:s.mounting.front_wall})),
@@ -206,7 +212,7 @@ function draw(state) {
   }
   function line(x1,y1,x2,y2) {
     const a=point(x1,y1), b=point(x2,y2);
-    add('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:'#2c405c'});
+    add('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:'#2c405c','clip-path':'url(#room-floor-clip)'});
   }
   function label(x,y,dx,dy,offset,text,wall=false) {
     const p=point(x,y), normal=projection.direction(-dx,dy);
@@ -217,11 +223,15 @@ function draw(state) {
     add('text',{x:tx,y:ty,fill:wall?'#b3c2d5':'#b3c2d5','font-size':wall?10:10,
       'text-anchor':'middle','dominant-baseline':'middle',transform:`rotate(${rotation} ${tx} ${ty})`},text);
   }
-  add('polygon',{points:corners.map(p=>{const v=point(p.x,p.y);return `${v.x},${v.y}`;}).join(' '),fill:'#122a4f',stroke:'#577394'});
-  label(room.width_mm/2,0,0,-1,44,'FRONT REFERENCE WALL',true);
-  label(0,room.depth_mm/2,-1,0,44,'LEFT REFERENCE WALL',true);
-  label(room.width_mm/2,room.depth_mm,0,1,32,'BACK WALL',true);
-  label(room.width_mm,room.depth_mm/2,1,0,32,'RIGHT WALL',true);
+  const floorPoints=corners.map(p=>{const v=point(p.x,p.y);return `${v.x},${v.y}`;}).join(' ');
+  const clip=add('clipPath',{id:'room-floor-clip'});
+  const shape=document.createElementNS('http://www.w3.org/2000/svg','polygon');
+  shape.setAttribute('points',floorPoints);clip.append(shape);
+  add('polygon',{points:floorPoints,fill:'#122a4f',stroke:'#577394'});
+  label(room.width_mm/2,0,0,-1,44,room.outline_mm?'FRONT REFERENCE · Y = 0':'FRONT REFERENCE WALL',true);
+  label(0,room.depth_mm/2,-1,0,44,room.outline_mm?'LEFT REFERENCE · X = 0':'LEFT REFERENCE WALL',true);
+  label(room.width_mm/2,room.depth_mm,0,1,32,room.outline_mm?'Y MAX':'BACK WALL',true);
+  label(room.width_mm,room.depth_mm/2,1,0,32,room.outline_mm?'X MAX':'RIGHT WALL',true);
   const step = Math.max(1, Math.ceil(Math.max(room.width_mm,room.depth_mm)/10000)*1000);
   for (let x=0; x<=room.width_mm; x+=step) {
     line(x,0,x,room.depth_mm);

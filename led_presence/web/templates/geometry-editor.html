@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-intro"><span class="eyebrow">VISUAL GEOMETRY EDITOR</span><h2>Shape the room. Place your devices.</h2><p class="hint">Work in a draft. Save applies geometry and stops affected lighting through the usual controls. <a href="{{ url_for('geometry') }}">Numeric geometry settings</a> · <a href="{{ url_for('devices') }}">Add or connect devices</a></p></div>
+<div class="editor-savebar"><button id="editor-save" type="button" disabled>Save geometry</button><button id="editor-discard" type="button" class="secondary" disabled>Discard &amp; reload</button><span id="editor-status" role="status">Loading installation…</span></div>
+<div id="editor-controls" class="panel">
+  <div class="editor-toolbar" role="toolbar" aria-label="Geometry editing tools">
+    <button id="editor-select" type="button" class="secondary" aria-pressed="true">Move objects</button>
+    <button id="editor-room" type="button" class="secondary" aria-pressed="false">Edit room</button>
+    <button id="editor-pan" type="button" class="secondary" aria-pressed="false">Pan view</button>
+    <button id="editor-undo" type="button" class="secondary" disabled>Undo</button>
+    <button id="editor-redo" type="button" class="secondary" disabled>Redo</button>
+    <button id="editor-fit" type="button" class="secondary">Fit view</button>
+    <button id="editor-zoom-in" type="button" class="secondary" aria-label="Zoom in plan">+</button>
+    <button id="editor-zoom-out" type="button" class="secondary" aria-label="Zoom out plan">−</button>
+    <label class="checkbox"><input id="editor-snap" type="checkbox" checked> Snap</label>
+    <label>Grid · mm<input id="editor-grid" type="number" value="100" min="1" max="10000" step="1"></label>
+  </div>
+  <div class="editor-workspace">
+    <div>
+      <svg id="editor-plan" tabindex="0" role="img" aria-label="Editable room plan. Select objects using the properties list. Arrow keys move selected objects; Delete removes a selected corner or leaf bar. Plus and minus zoom. Home fits the view."></svg>
+      <p class="hint">Mouse: drag objects; drag empty space to pan; wheel to zoom. Touch: tap to select, then drag; two fingers pan and pinch. Edit room unlocks corners. Shift temporarily disables snapping. The origin stays fixed: X →, Y ↑.</p>
+      <p id="editor-validation" role="status" class="hint"></p>
+    </div>
+    <aside class="editor-properties" aria-label="Selection properties">
+      <label>Select object<select id="editor-object" disabled></select></label>
+      <p id="editor-selection-note" class="hint"></p>
+      <label class="checkbox"><input id="editor-lock" type="checkbox"> Lock selection</label>
+      <form id="editor-properties"><fieldset id="editor-fields" disabled></fieldset></form>
+      <div class="editor-object-actions">
+        <button id="editor-split" type="button" class="secondary" disabled>Split selected wall</button>
+        <button id="editor-remove" type="button" class="secondary" disabled>Remove selected</button>
+        <button id="editor-add-bar" type="button" class="secondary" disabled>Add connected bar</button>
+      </div>
+      <div id="editor-presets" hidden><h3>Room outline presets</h3><p class="hint">Replace the outline only; device coordinates stay in place.</p><button id="editor-rectangle" type="button" class="secondary">Rectangle</button> <button id="editor-l-shape" type="button" class="secondary">L-shaped room</button></div>
+    </aside>
+  </div>
+</div>
+<details class="editor-preview" open><summary>3D draft preview</summary><p class="hint">Shows the last valid draft, including light heights and joint angles. No live animation or hardware output.</p>{% include 'scene-view.html' %}</details>
+{% endblock %}

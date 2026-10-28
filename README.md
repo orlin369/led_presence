@@ -110,6 +110,63 @@ Saving device identity preserves existing geometry and animation. Saving sensor 
 
 Room and Sensors tabs have independent saves and retain unsaved edits. Click-to-place works only on Sensors. Tabs support arrow keys, Home and End.
 
+## Visual geometry editor
+
+Open **Geometry → Open visual editor** (`/geometry/editor`). The 2D plan
+and its 3D draft preview share one browser draft. Edits do not move hardware
+or change the active configuration until **Save geometry**. Saving uses the
+existing stop/restore rules for affected lights. **Discard & reload** loads
+the latest saved configuration; unsaved work is lost. If another page or
+browser changes the configuration, saving is rejected instead of overwriting
+those changes. Keep the draft open to inspect it, or discard and reload.
+
+- **Edit room** enables corner handles and wall selection. Start with a
+  rectangle or L-shaped preset, select a wall and **Split selected wall** to
+  add a corner, or remove a selected corner. Corners can be dragged or edited
+  with exact X/Y coordinates. Wall length and angle move its end corner.
+  Crossing, touching, overlapping and zero-area outlines cannot be saved.
+- **Move objects** places already-registered sensors and controllers. Drag
+  their centre to move, or their pale handle to rotate yaw. The properties
+  list also provides keyboard selection, exact positions, heights and angles.
+  Register new hardware on **Devices** first; this editor preserves device
+  IDs, addresses and enabled states.
+- Select a light bar and drag its endpoint to rotate the joint. Height,
+  pitch and roll remain intact. **Add connected bar** attaches a bar to the
+  selected bar or controller; descendants follow their parent. Remove leaf
+  bars only, reconnecting children first. Shared product dimensions and
+  electrical wiring settings remain on **Geometry → Lights**.
+- **Snap** uses the chosen grid and nearby object/corner axes; drag guides
+  show the snapped coordinates. Rotation snaps to 15 degrees. Hold Shift
+  while dragging to disable snapping. **Lock selection** prevents accidental
+  edits for the current editing session (locks are not installation data).
+- Drag empty space or choose **Pan view** to pan; wheel or +/- buttons zoom.
+  Touch: tap an object to select, then drag it; use two fingers to pan/pinch.
+  Room corners move only in Edit room mode. Use **Fit view** after changing
+  the coordinate envelope or moving objects beyond the current view.
+- **Undo/Redo** retain up to 100 edits until Save or Discard. With focus on
+  the plan, arrows move a selection by the grid step (Shift: 1 mm), Delete
+  removes a selected corner or leaf bar, +/- zoom, and Home fits the view.
+  Ctrl/Cmd+Z undoes and Ctrl/Cmd+Shift+Z or Ctrl+Y redoes outside text fields.
+
+Room geometry optionally stores `room.outline_mm`: 3–64 `[X, Y]` corners in
+boundary order, without repeating the first point. It supports concave rooms
+and angled walls with one uniform ceiling height; holes, curved walls,
+furniture and stepped/sloped ceilings are not yet modeled. Schema 6 remains
+compatible: when the field is absent, the existing rectangle is used without
+a migration or changes to saved coordinates. Dashboard and 3D show the saved
+outline; the editor's 3D panel shows the last valid draft without live tracks
+or animation output.
+
+The origin stays fixed. Width/depth define a positive coordinate envelope,
+not necessarily wall lengths. X increases right and Y toward the back.
+Existing `left_wall` / `front_wall` mounting values remain offsets from the
+X=0 / Y=0 reference axes, even where there is no actual wall. Resizing width
+or depth scales the outline from the origin while leaving devices in place.
+Increase the envelope before extending corners beyond its bounds. Devices
+and bars outside the outline are preserved and flagged for review; tracks
+are not clipped by the room polygon. The editor does not fuse sensors or
+apply additional radar height/tilt calibration.
+
 ## Per-installation configuration
 
 The active configuration is **`instance/config.json`**, excluded from Git. Back it up separately. `config.example.json` supplies defaults only when creating a new instance. Editing the example does not override an existing installation. Stop the app before editing active JSON directly, then restart it. The browser picks up updated values when its form has no unsaved edits.
@@ -119,7 +176,8 @@ Schema version **6** adds multiple controllers and a shared product catalogue. E
 | Configuration | Meaning |
 | --- | --- |
 | `installation_name`, `calibrated`, `physical.notes` | Installation label and verification status/notes |
-| `room.width_mm`, `depth_mm`, `height_mm` | Shared room dimensions |
+| `room.width_mm`, `depth_mm`, `height_mm` | Coordinate envelope and uniform ceiling height |
+| `room.outline_mm` (optional) | Ordered polygon corners in mm; omitted for legacy rectangles |
 | `sensors[]` | Sensor IDs, names, addresses, enabled states and mounting |
 | `lighting.products[]` | Shared bar definitions: ID, name, length, pixels per bar, verification |
 | `lighting.controllers[]` | Controller IDs, names, enabled states, product references, device settings, bars and animation |

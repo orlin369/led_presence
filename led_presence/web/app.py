@@ -17,6 +17,8 @@ from flask import (
     url_for,
 )
 
+from led_presence.config.configuration import validate_config
+from led_presence.core.geometry_preview import geometry_preview
 from led_presence.core.installation import Installation
 from led_presence.core.paths import ROOT
 
@@ -32,6 +34,38 @@ def three_d():
 
 def geometry():
     return render_template("geometry.html", geometry_page=True)
+
+
+def geometry_editor():
+    """Edit room polygons and placements in an isolated browser draft."""
+    return render_template("geometry-editor.html", editor_page=True)
+
+
+def geometry_draft():
+    """Preview a validated draft or save it with optimistic conflict checks."""
+    if request.headers.get("Origin") and request.headers[
+        "Origin"
+    ] != request.host_url.rstrip("/"):
+        return jsonify(error="Cross-origin writes are not allowed"), 403
+    if not request.is_json:
+        return jsonify(error="Send application/json"), 415
+    data = request.get_json()
+    if not isinstance(data, dict) or not isinstance(data.get("config"), dict):
+        return jsonify(error="Provide a configuration draft"), 400
+    installation = current_app.extensions["installation"]
+    try:
+        validate_config(data["config"])
+        if request.method == "PUT":
+            with installation.lock:
+                if data.get("base_config") != installation.config:
+                    return jsonify(
+                        error="Installation changed elsewhere. Discard and "
+                        "reload before saving; your draft has been kept."
+                    ), 409
+                installation.save(data["config"])
+        return jsonify(geometry_preview(data["config"]))
+    except (ValueError, KeyError, TypeError, AttributeError) as exc:
+        return jsonify(error=str(exc)), 400
 
 
 def devices():
@@ -168,6 +202,14 @@ def create_app(instance_path=None, start_worker=True):
     app.add_url_rule("/", view_func=index, methods=["GET"])
     app.add_url_rule("/3d", view_func=three_d, methods=["GET"])
     app.add_url_rule("/geometry", view_func=geometry, methods=["GET"])
+    app.add_url_rule(
+        "/geometry/editor", view_func=geometry_editor, methods=["GET"]
+    )
+    app.add_url_rule(
+        "/api/geometry/draft",
+        view_func=geometry_draft,
+        methods=["POST", "PUT"],
+    )
     app.add_url_rule("/devices", view_func=devices, methods=["GET"])
     app.add_url_rule("/lights", view_func=lights, methods=["GET"])
     app.add_url_rule("/nolu", view_func=nolu, methods=["GET"])
