@@ -75,6 +75,14 @@ fonts across pages, controls, tables and visualization labels on every OS.
 No font installation or external font service is needed. Font attribution
 and the SIL Open Font License are in `led_presence/web/static/fonts/`.
 
+The dark interface uses the Shelly Brand Guidelines 2025 palette (pp. 10–11):
+Shelly Blue `#4495D1`, Medium Blue `#003C82`, Dark Blue `#122A4F`, Light Blue
+`#AAE1FA` and Gray `#A0A0A0`. Dark surfaces and muted text are adapted for
+this app; Roboto remains the interface font. Theme colours are centralized
+in CSS custom properties in `led_presence/web/static/style.css`. Person
+colours, LED preview colours and green/red power indicators retain their
+existing meanings.
+
 ## Pages and setup flow
 
 1. **Devices** (`/devices`): add, name, enable, disable or remove sensors and light controllers. Set IP addresses, controller component IDs, DDP ports and product types here. Below the registry, select a controller for its live preview, animation settings and independent start/stop controls (`/devices#lights`). Device IDs stay stable when names or locations change.

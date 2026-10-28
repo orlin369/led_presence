@@ -41,7 +41,7 @@ function objects(updateTable) {
     const current = live.find(s => s.id === sensor.id);
     const description = !sensor.enabled ? 'Disabled' : !current?.connected ? 'Offline' : current.stale ? 'Stale' : 'Online';
     marker(point, color, `${sensor.name} · ${description}`, 7);
-    line([point[0], point[1], 0], point, '#42585f');
+    line([point[0], point[1], 0], point, '#2c405c');
     const angle = sensor.mounting.yaw * Math.PI / 180;
     const reach = radius * 0.13;
     const tip = [point[0] + Math.sin(angle) * reach, point[1] + Math.cos(angle) * reach, point[2]];
@@ -57,7 +57,7 @@ function objects(updateTable) {
     marker(controller.controller, color, controller.name, 7);
     if (updateTable) row(controller.name, !controller.enabled ? 'Disabled' : controller.controller_on === true ? 'On' : controller.controller_on === false ? 'Off' : 'Unknown / offline', controller.controller);
     for (const bar of controller.bars) {
-      line(bar.start, bar.end, '#52676f', 7);
+      line(bar.start, bar.end, '#577394', 7);
       const pixels = bar.pixels || [bar.color || [160, 190, 200]];
       for (let i = 0; i < pixels.length; i++) {
         const index = bar.reversed ? pixels.length - 1 - i : i;
@@ -65,7 +65,7 @@ function objects(updateTable) {
         const b = bar.start.map((v, axis) => v + (bar.end[axis] - v) * (i + 1) / pixels.length);
         line(a, b, rgb(pixels[index]), 4);
       }
-      marker(bar.end, '#b5c6c9', `${controller.name} / ${bar.id}`, 2);
+      marker(bar.end, '#b3c2d5', `${controller.name} / ${bar.id}`, 2);
       if (updateTable) row(`${controller.name} / ${bar.id}`, 'Bar start', bar.start);
     }
   }
@@ -92,22 +92,22 @@ function draw(updateTable = false) {
   const floor = [[0, 0, 0], [w, 0, 0], [w, d, 0], [0, d, 0]];
   ctx.beginPath();
   floor.forEach((p, i) => { const q = project(p); if (i) ctx.lineTo(q[0], q[1]); else ctx.moveTo(q[0], q[1]); });
-  ctx.closePath(); ctx.fillStyle = '#18282e'; ctx.fill();
+  ctx.closePath(); ctx.fillStyle = '#122a4f'; ctx.fill();
   for (let i = 0; i <= 10; i++) {
-    line([w * i / 10, 0, 0], [w * i / 10, d, 0], '#263d45');
-    line([0, d * i / 10, 0], [w, d * i / 10, 0], '#263d45');
+    line([w * i / 10, 0, 0], [w * i / 10, d, 0], '#2c405c');
+    line([0, d * i / 10, 0], [w, d * i / 10, 0], '#2c405c');
   }
   for (let i = 0; i < 4; i++) {
     const a = floor[i], b = floor[(i + 1) % 4];
-    line(a, b, '#66828d', 2);
-    line(a, [a[0], a[1], h], '#48616d');
-    line([a[0], a[1], h], [b[0], b[1], h], '#48616d');
+    line(a, b, '#577394', 2);
+    line(a, [a[0], a[1], h], '#577394');
+    line([a[0], a[1], h], [b[0], b[1], h], '#577394');
   }
-  marker([w / 2, 0, 0], '#a4bac2', `FRONT · ${w} mm`, 0);
-  marker([w / 2, d, 0], '#a4bac2', 'BACK', 0);
-  marker([0, d / 2, 0], '#a4bac2', `LEFT · ${d} mm`, 0);
-  marker([w, d / 2, 0], '#a4bac2', 'RIGHT', 0);
-  marker([0, 0, h], '#a4bac2', `Height ${h} mm`, 0);
+  marker([w / 2, 0, 0], '#b3c2d5', `FRONT · ${w} mm`, 0);
+  marker([w / 2, d, 0], '#b3c2d5', 'BACK', 0);
+  marker([0, d / 2, 0], '#b3c2d5', `LEFT · ${d} mm`, 0);
+  marker([w, d / 2, 0], '#b3c2d5', 'RIGHT', 0);
+  marker([0, 0, h], '#b3c2d5', `Height ${h} mm`, 0);
   if (updateTable) document.getElementById('scene-objects').replaceChildren();
   objects(updateTable);
   primitives.sort((a, b) => a.points.reduce((s, p) => s + project(p)[2], 0) / a.points.length - b.points.reduce((s, p) => s + project(p)[2], 0) / b.points.length);
@@ -123,7 +123,7 @@ function draw(updateTable = false) {
       if (item.size) { ctx.arc(x, y, item.size, 0, Math.PI * 2); ctx.fill(); }
       if (labels && item.label) {
         ctx.font = '12px Roboto, sans-serif'; ctx.lineWidth = 4;
-        ctx.strokeStyle = '#101a1f'; ctx.strokeText(item.label, x + 10, y - 10); ctx.fillText(item.label, x + 10, y - 10);
+        ctx.strokeStyle = '#0b1524'; ctx.strokeText(item.label, x + 10, y - 10); ctx.fillText(item.label, x + 10, y - 10);
       }
     }
   }

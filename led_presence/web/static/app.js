@@ -206,7 +206,7 @@ function draw(state) {
   }
   function line(x1,y1,x2,y2) {
     const a=point(x1,y1), b=point(x2,y2);
-    add('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:'#2c4148'});
+    add('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:'#2c405c'});
   }
   function label(x,y,dx,dy,offset,text,wall=false) {
     const p=point(x,y), normal=projection.direction(-dx,dy);
@@ -214,10 +214,10 @@ function draw(state) {
     let rotation=wall?Math.atan2(-normal.x,normal.y)*180/Math.PI:0;
     if(rotation>90)rotation-=180;
     if(rotation < -90)rotation+=180;
-    add('text',{x:tx,y:ty,fill:wall?'#b4c6ca':'#8aa4ad','font-size':wall?10:10,
+    add('text',{x:tx,y:ty,fill:wall?'#b3c2d5':'#b3c2d5','font-size':wall?10:10,
       'text-anchor':'middle','dominant-baseline':'middle',transform:`rotate(${rotation} ${tx} ${ty})`},text);
   }
-  add('polygon',{points:corners.map(p=>{const v=point(p.x,p.y);return `${v.x},${v.y}`;}).join(' '),fill:'#192b30',stroke:'#68808a'});
+  add('polygon',{points:corners.map(p=>{const v=point(p.x,p.y);return `${v.x},${v.y}`;}).join(' '),fill:'#122a4f',stroke:'#577394'});
   label(room.width_mm/2,0,0,-1,44,'FRONT REFERENCE WALL',true);
   label(0,room.depth_mm/2,-1,0,44,'LEFT REFERENCE WALL',true);
   label(room.width_mm/2,room.depth_mm,0,1,32,'BACK WALL',true);
@@ -234,16 +234,16 @@ function draw(state) {
   if(lighting) {
     for(const bar of lighting.bars) {
       const a=point(bar.start[0],bar.start[1]),b=point(bar.end[0],bar.end[1]);
-      add('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:'#536873','stroke-width':10,'stroke-linecap':'round'});
+      add('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:'#577394','stroke-width':10,'stroke-linecap':'round'});
       add('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:`rgb(${bar.color.join(',')})`,'stroke-width':6,'stroke-linecap':'round'});
-      add('text',{x:(a.x+b.x)/2,y:(a.y+b.y)/2+18,fill:'#a8c6cf','font-size':10,'text-anchor':'middle'},`${bar.controller_name}: ${bar.id}`);
+      add('text',{x:(a.x+b.x)/2,y:(a.y+b.y)/2+18,fill:'#b3c2d5','font-size':10,'text-anchor':'middle'},`${bar.controller_name}: ${bar.id}`);
     }
     for(const controller of lighting.controllers){
     const root=point(controller.controller[0],controller.controller[1]);
     // Green/red follow the lamp's own on/off state; grey means unknown/offline.
-    const power=controller.controller_on===true?'#4cd964':controller.controller_on===false?'#ff4d4d':'#8eb4c6';
+    const power=controller.controller_on===true?'#4cd964':controller.controller_on===false?'#ff4d4d':'#aae1fa';
     add('rect',{x:root.x-6,y:root.y-6,width:12,height:12,rx:2,fill:power});
-    add('text',{x:root.x+10,y:root.y-10,fill:'#8eb4c6','font-size':10},controller.name);
+    add('text',{x:root.x+10,y:root.y-10,fill:'#aae1fa','font-size':10},controller.name);
     }
   }
   for (const s of c.sensors) {

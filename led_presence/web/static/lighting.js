@@ -105,18 +105,18 @@
     const fresh=Date.now()-receivedAt<2000;
     for(const bar of frame.bars){
       const a=point(bar.start),b=point(bar.end);
-      add('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:'#3a5260','stroke-width':18,'stroke-linecap':'round'});
+      add('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:'#577394','stroke-width':18,'stroke-linecap':'round'});
       const pixels=bar.reversed?[...bar.pixels].reverse():bar.pixels;
       for(let i=0;i<pixels.length;i++){
         const u=i/pixels.length,v=(i+1)/pixels.length;
-        add('line',{x1:a.x+(b.x-a.x)*u,y1:a.y+(b.y-a.y)*u,x2:a.x+(b.x-a.x)*v,y2:a.y+(b.y-a.y)*v,stroke:fresh?rgb(pixels[i]):'#26363d','stroke-width':11,'stroke-linecap':'round'});
+        add('line',{x1:a.x+(b.x-a.x)*u,y1:a.y+(b.y-a.y)*u,x2:a.x+(b.x-a.x)*v,y2:a.y+(b.y-a.y)*v,stroke:fresh?rgb(pixels[i]):'#182d49','stroke-width':11,'stroke-linecap':'round'});
       }
-      add('text',{x:(a.x+b.x)/2,y:(a.y+b.y)/2-18,fill:'#d2e9ec','font-size':11,'text-anchor':'middle'},`${bar.id} · #${bar.wire_order}`);
-      add('circle',{cx:b.x,cy:b.y,r:3,fill:'#92aab5'});
+      add('text',{x:(a.x+b.x)/2,y:(a.y+b.y)/2-18,fill:'#f3f8fd','font-size':11,'text-anchor':'middle'},`${bar.id} · #${bar.wire_order}`);
+      add('circle',{cx:b.x,cy:b.y,r:3,fill:'#b3c2d5'});
     }
-    const root=point(frame.controller);add('rect',{x:root.x-10,y:root.y-10,width:20,height:20,rx:4,fill:'#b7ed86'});
-    add('text',{x:root.x,y:root.y+32,fill:'#b7ed86','font-size':12,'text-anchor':'middle'},'CONTROLLER / START');
-    add('text',{x:24,y:30,fill:'#829ca6','font-size':11},elevation?'FRONT ELEVATION · horizontal / height · mm':'TOP VIEW · LEFT REFERENCE WALL / FRONT REFERENCE WALL · mm');
+    const root=point(frame.controller);add('rect',{x:root.x-10,y:root.y-10,width:20,height:20,rx:4,fill:'#4495d1'});
+    add('text',{x:root.x,y:root.y+32,fill:'#4495d1','font-size':12,'text-anchor':'middle'},'CONTROLLER / START');
+    add('text',{x:24,y:30,fill:'#b3c2d5','font-size':11},elevation?'FRONT ELEVATION · horizontal / height · mm':'TOP VIEW · LEFT REFERENCE WALL / FRONT REFERENCE WALL · mm');
   }
   function status() {
     if(!frame)return;
