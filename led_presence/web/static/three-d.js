@@ -122,7 +122,7 @@ function draw(updateTable = false) {
       const [x, y] = points[0];
       if (item.size) { ctx.arc(x, y, item.size, 0, Math.PI * 2); ctx.fill(); }
       if (labels && item.label) {
-        ctx.font = '12px Segoe UI, sans-serif'; ctx.lineWidth = 4;
+        ctx.font = '12px Roboto, sans-serif'; ctx.lineWidth = 4;
         ctx.strokeStyle = '#101a1f'; ctx.strokeText(item.label, x + 10, y - 10); ctx.fillText(item.label, x + 10, y - 10);
       }
     }
@@ -174,6 +174,8 @@ document.getElementById('scene-reset').addEventListener('click', reset);
 document.getElementById('scene-in').addEventListener('click', () => magnify(1.2));
 document.getElementById('scene-out').addEventListener('click', () => magnify(1 / 1.2));
 document.getElementById('scene-labels').addEventListener('change', () => draw());
+// Canvas text must be redrawn when the bundled web font finishes loading.
+document.fonts.load('12px Roboto').then(() => draw()).catch(() => draw());
 new ResizeObserver(resize).observe(canvas);
 async function poll() {
   try {

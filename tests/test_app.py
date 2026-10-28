@@ -64,6 +64,22 @@ class AppTests(unittest.TestCase):
         self.assertTrue(state["sensors"][0]["stale"])
         self.assertEqual(state["tracks"], [])
 
+    def test_bundled_fonts_are_served_without_system_installation(self):
+        for style in ("Regular", "Italic"):
+            with self.client.get(
+                f"/static/fonts/Roboto-{style}.ttf"
+            ) as response:
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(
+                    response.get_data().startswith(b"\x00\x01\x00\x00")
+                )
+        with self.client.get("/static/fonts/OFL.txt") as response:
+            self.assertEqual(response.status_code, 200)
+            self.assertIn(b"SIL OPEN FONT LICENSE", response.get_data())
+        page = self.client.get("/").get_data(as_text=True)
+        self.assertIn('as="font"', page)
+        self.assertIn("fonts/Roboto-Regular.ttf", page)
+
     def test_three_d_page_uses_live_geometry_and_separate_renderer(self):
         response = self.client.get("/3d")
         self.assertEqual(response.status_code, 200)

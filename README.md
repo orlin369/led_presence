@@ -70,6 +70,11 @@ python3.12 -m venv .venv
 
 To start it later, run `.venv/bin/python main.py` from the repository folder, or `source .venv/bin/activate` followed by `python main.py`. macOS may ask whether Python can find devices on the local network; allow it, or the sensors and controllers cannot be reached.
 
+The interface uses bundled Roboto web
+fonts across pages, controls, tables and visualization labels on every OS.
+No font installation or external font service is needed. Font attribution
+and the SIL Open Font License are in `led_presence/web/static/fonts/`.
+
 ## Pages and setup flow
 
 1. **Devices** (`/devices`): add, name, enable, disable or remove sensors and light controllers. Set IP addresses, controller component IDs, DDP ports and product types here. Below the registry, select a controller for its live preview, animation settings and independent start/stop controls (`/devices#lights`). Device IDs stay stable when names or locations change.
