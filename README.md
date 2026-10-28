@@ -6,7 +6,7 @@ A local Flask application that turns real Shelly Presence Gen4 readings into spa
 
 All platforms need Python 3.12 or newer, Git and a computer on the same network as the Shelly devices. Each section installs the app into a local virtual environment (`.venv`) and starts it. Afterwards, open **http://127.0.0.1:5000** on the same computer and stop the app with Ctrl+C.
 
-The app uses Flask's local development server on loopback only, without debug mode or the reloader. On first start it creates `instance/config.json` from `config.example.json`; enter your own device addresses on **Devices** and your measurements on **Geometry** (see [Per-installation configuration](#per-installation-configuration)).
+The app uses Flask's development server on `0.0.0.0:5000` (all network interfaces), without debug mode or the reloader. From another computer on the same network, open `http://<server-LAN-IP>:5000`; on the server itself, use `http://127.0.0.1:5000`. On first start it creates `instance/config.json` from `config.example.json`; enter your own device addresses on **Devices** and your measurements on **Geometry** (see [Per-installation configuration](#per-installation-configuration)).
 
 ### Windows
 
@@ -251,7 +251,7 @@ Multiple controllers share this room. Separate installations can use another con
 
 ```powershell
 $env:LED_PRESENCE_INSTANCE = 'C:\LED-Presence\room-b'
-.\.venv\Scripts\python.exe -m flask --app 'led_presence.web.app:create_app()' run --host 127.0.0.1 --port 5001
+.\.venv\Scripts\python.exe -m flask --app 'led_presence.web.app:create_app()' run --host 0.0.0.0 --port 5001
 ```
 
 Do not enable the reloader, which duplicates device readers and animation workers.

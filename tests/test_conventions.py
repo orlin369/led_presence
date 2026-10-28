@@ -93,7 +93,7 @@ class ConventionTests(unittest.TestCase):
             entry_point.main()
         factory.assert_called_once_with()
         factory.return_value.run.assert_called_once_with(
-            host="127.0.0.1", port=5000, debug=False
+            host="0.0.0.0", port=5000, debug=False
         )
 
 

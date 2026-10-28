@@ -6,8 +6,8 @@ from led_presence.web.app import create_app
 
 
 def main():
-    """Start the local server without debug mode or automatic reload."""
-    create_app().run(host="127.0.0.1", port=5000, debug=False)
+    """Listen on all interfaces without debug mode or automatic reload."""
+    create_app().run(host="0.0.0.0", port=5000, debug=False)
 
 
 if __name__ == "__main__":
