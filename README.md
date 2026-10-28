@@ -76,6 +76,21 @@ To start it later, run `.venv/bin/python main.py` from the repository folder, or
 2. **Geometry** (`/geometry`): separate **Room**, **Sensors** and **Lights** tabs. Room sets dimensions and calibration notes. Sensors sets mounting for registered sensors and shows live readings. Lights selects a controller and sets its location, shared product measurements and bar connections. Direct links: `/geometry#room`, `/geometry#sensors`, `/geometry#lights`.
 3. **Dashboard** (`/`): the shared room plan, presence summary and object coordinates. All sensor and controller locations are shown; bar labels include the controller name. Each controller box is green when the lamp is switched on and red when it is off (for example after its on/off button), checked about once per second; grey means its state is unknown or the controller is offline. Viewpoint controls change only the drawing.
 
+The **3D** tab (`/3d`), immediately after Dashboard, shows the same live
+installation in an interactive 3D room: floor grid, room height and outline,
+sensor mounting locations and horizontal facing arrows, controller power
+states, connected light bars with live preview colours, and tracked people.
+Drag to orbit, Shift-drag or right-drag to pan, and scroll to zoom. Camera
+presets, zoom buttons, labels and Reset view are available above the scene.
+Keyboard users can focus the scene and use arrows to orbit, Shift + arrows
+to pan, + / − to zoom, and Home to reset. Touch dragging orbits the view.
+The object table lists coordinates in mm. Tracks use floor projections;
+reported radar Z is not calibrated room height. Light geometry includes
+saved height, yaw, pitch and roll. This view updates once per second and
+uses local browser canvas rendering without external scripts or services.
+If connectivity fails, it marks the retained snapshot as stale. View controls
+only change the camera. Start/stop animation controls remain on Dashboard.
+
 There is no separate Lights navigation tab. Geometry's Lights tab is for physical placement and connections; Devices contains operating settings and controls. Old `/lights` and `/nolu` links redirect to `/devices#lights`. Unsaved light edits stay with their controller when switching selections.
 
 Saving device identity preserves existing geometry and animation. Saving sensor geometry preserves device names, addresses and enabled states. Saving one controller preserves the others. A change to a shared product affects every controller using it and stops/restores those controllers' active output first. A change to one controller stops only its output. Removing or disabling a device stops its reader while other devices continue independently.

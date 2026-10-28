@@ -2,16 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>{% if geometry_page %}Geometry · {% elif devices_page %}Devices · {% endif %}LED Presence</title>
+  <title>{% if three_d_page %}3D · {% elif geometry_page %}Geometry · {% elif devices_page %}Devices · {% endif %}LED Presence</title>
   <link rel="icon" href="data:,"><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-  <script defer src="{{ url_for('static', filename='devices.js' if devices_page else 'app.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='three-d.js' if three_d_page else 'devices.js' if devices_page else 'app.js') }}"></script>
   {% if devices_page or geometry_page %}<script defer src="{{ url_for('static', filename='lighting.js') }}"></script>{% endif %}
 </head>
-<body class="{% if geometry_page %}geometry-page{% elif devices_page %}devices-page{% else %}dashboard-page{% endif %}">
+<body class="{% if three_d_page %}three-d-page{% elif geometry_page %}geometry-page{% elif devices_page %}devices-page{% else %}dashboard-page{% endif %}">
 <header>
   <div><h1>LED Presence<span class="dot">.</span></h1></div>
   <div class="header-tools"><nav aria-label="Main navigation">
-    <a href="{{ url_for('index') }}" {% if not geometry_page and not devices_page %}aria-current="page"{% endif %}>Dashboard</a>
+    <a href="{{ url_for('index') }}" {% if not geometry_page and not devices_page and not three_d_page %}aria-current="page"{% endif %}>Dashboard</a>
+    <a href="{{ url_for('three_d') }}" {% if three_d_page %}aria-current="page"{% endif %}>3D</a>
     <a href="{{ url_for('devices') }}" {% if devices_page %}aria-current="page"{% endif %}>Devices</a>
     <a href="{{ url_for('geometry') }}" {% if geometry_page %}aria-current="page"{% endif %}>Geometry</a>
   </nav></div>

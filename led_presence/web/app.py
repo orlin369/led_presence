@@ -25,6 +25,11 @@ def index():
     return render_template("index.html", geometry_page=False)
 
 
+def three_d():
+    """Display the live installation in an interactive 3D room view."""
+    return render_template("three-d.html", three_d_page=True)
+
+
 def geometry():
     return render_template("geometry.html", geometry_page=True)
 
@@ -161,6 +166,7 @@ def create_app(instance_path=None, start_worker=True):
     atexit.register(installation.close)
 
     app.add_url_rule("/", view_func=index, methods=["GET"])
+    app.add_url_rule("/3d", view_func=three_d, methods=["GET"])
     app.add_url_rule("/geometry", view_func=geometry, methods=["GET"])
     app.add_url_rule("/devices", view_func=devices, methods=["GET"])
     app.add_url_rule("/lights", view_func=lights, methods=["GET"])

@@ -64,6 +64,31 @@ class AppTests(unittest.TestCase):
         self.assertTrue(state["sensors"][0]["stale"])
         self.assertEqual(state["tracks"], [])
 
+    def test_three_d_page_uses_live_geometry_and_separate_renderer(self):
+        response = self.client.get("/3d")
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn('aria-current="page">3D</a>', page)
+        self.assertLess(page.index(">Dashboard</a>"), page.index(">3D</a>"))
+        self.assertLess(page.index(">3D</a>"), page.index(">Devices</a>"))
+        self.assertIn("/static/three-d.js", page)
+        self.assertNotIn("/static/app.js", page)
+        self.assertIn('id="scene"', page)
+        self.assertIn('id="scene-objects"', page)
+        self.assertIn("not calibrated room height", page)
+        self.two_sensors()
+        state = self.client.get("/api/state").get_json()
+        self.assertEqual(state["config"]["room"]["height_mm"], 3000)
+        self.assertEqual(len(state["config"]["sensors"]), 2)
+        controller = state["lighting"]["controllers"][0]
+        self.assertEqual(len(controller["controller"]), 3)
+        for bar in controller["bars"]:
+            self.assertEqual(len(bar["start"]), 3)
+            self.assertEqual(len(bar["end"]), 3)
+        for path in ("/", "/devices", "/geometry"):
+            page = self.client.get(path).get_data(as_text=True)
+            self.assertIn('href="/3d"', page)
+
     def test_pages_have_separate_installation_editors(self):
         pages = {}
         for path in ("/", "/devices", "/geometry"):
